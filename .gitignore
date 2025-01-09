@@ -1,0 +1,5 @@
+*.env
+packages-lock.json
+package.json
+__pycache__
+backend/backend/

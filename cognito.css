@@ -1,0 +1,17 @@
+.banner-customizable {
+    background: linear-gradient(135deg, #0066cc 0%, #004999 100%) !important;
+}
+
+.label-customizable {
+    font-weight: 500 !important;
+}
+
+.submitButton-customizable {
+    background-color: #0066cc !important;
+    border-radius: 4px !important;
+    padding: 12px 24px !important;
+}
+
+.submitButton-customizable:hover {
+    background-color: #0052a3 !important;
+}

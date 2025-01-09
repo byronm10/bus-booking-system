@@ -1,0 +1,14 @@
+fastapi>=0.104.1
+uvicorn>=0.24.0
+sqlalchemy>=2.0.23
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.0
+pydantic>=2.5.1
+python-multipart>=0.0.6
+alembic>=1.12.1
+boto3>=1.33.6
+python-jose[cryptography]>=3.3.0
+passlib>=1.7.4
+authlib>=1.2.1
+itsdangerous>=2.1.2  # Required for SessionMiddleware
+httpx>=0.20.0
