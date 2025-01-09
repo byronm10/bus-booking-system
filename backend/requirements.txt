@@ -10,5 +10,5 @@ boto3>=1.33.6
 python-jose[cryptography]>=3.3.0
 passlib>=1.7.4
 authlib>=1.2.1
-itsdangerous>=2.1.2  # Required for SessionMiddleware
+itsdangerous>=2.1.2
 httpx>=0.20.0
