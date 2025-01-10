@@ -8,14 +8,12 @@ import requests
 from models import User, UserRole
 from db import get_db
 
-# Cognito client setup
 cognito_client = boto3.client('cognito-idp',
     aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
     aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
     region_name=os.getenv('AWS_REGION')
 )
 
-# Get Cognito public keys
 COGNITO_REGION = os.getenv('AWS_REGION')
 COGNITO_USER_POOL_ID = os.getenv('COGNITO_USER_POOL_ID')
 COGNITO_JWKS_URL = f'https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json'
