@@ -132,3 +132,71 @@
 .delete-button:hover {
   background-color: #c82333;
 }
+
+.header-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.edit-profile-button {
+  padding: 10px;
+}
+
+.user-form select {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+  width: 100%;
+  margin-bottom: 1rem;
+  height: 40px; /* Added for better visibility of options */
+}
+
+.user-form select option {
+  padding: 8px;
+  font-size: 14px;
+}
+
+.user-form select option:hover {
+  background-color: #f8f9fa;
+}
+
+.user-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.details-button {
+  background-color: #17a2b8;
+  color: white;
+  padding: 5px 10px;
+  margin: 0 5px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.details-button:hover {
+  background-color: #138496;
+}
+
+.user-details {
+  margin: 1.5rem 0;
+}
+
+.detail-row {
+  display: flex;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.detail-label {
+  font-weight: bold;
+  width: 120px;
+  color: #666;
+}
+
+.detail-value {
+  flex: 1;
+}

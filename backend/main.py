@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Form, Request
 from sqlalchemy.orm import Session
 from db import get_db, Base, engine
-from models import User, UserRole, Company  # Quitamos CompanyResponse de aquí
-from schemas import UserCreate, UserResponse, CompanyCreate, CompanyResponse  # Agregamos CompanyCreate y CompanyResponse aquí
+from models import User, UserRole, Company 
+from schemas import UserCreate, UserResponse, CompanyCreate, CompanyResponse  
 from typing import List
 from uuid import UUID
 from sqlalchemy import create_engine, text
@@ -54,7 +54,15 @@ with engine.connect() as conn:
             DO $$ 
             BEGIN
                 IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-                    CREATE TYPE user_role AS ENUM ('ADMIN', 'OPERATOR', 'DRIVER', 'PASSENGER');
+                    CREATE TYPE user_role AS ENUM (
+                        'ADMIN', 
+                        'OPERATOR', 
+                        'DRIVER', 
+                        'PASSENGER', 
+                        'TECNICO', 
+                        'JEFE_TALLER', 
+                        'ADMINISTRATIVO'
+                    );
                 END IF;
             END $$;
         """))
@@ -89,38 +97,180 @@ async def startup_event():
         db.close()
 
 @app.post("/users/", response_model=UserResponse)
-def create_user(user: UserCreate, db: Session = Depends(get_db), admin: User = Depends(verify_admin)):
-    user_dict = user.model_dump()
-    db_user = User(**user_dict)
-    
+async def create_user(
+    user: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     try:
-        # Create user in Cognito
-        cognito_response = cognito_client.admin_create_user(
-            UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
-            Username=user.email,
-            UserAttributes=[
-                {'Name': 'email', 'Value': user.email},
-                {'Name': 'name', 'Value': user.name},
-                {'Name': 'custom:role', 'Value': user.role.value}  # Store role in Cognito
-            ],
-            TemporaryPassword='Temp123!'  # User will be forced to change this
+        print(f"Creating user with data: {user.model_dump()}")
+        print(f"Current admin: {current_user.email}")
+
+        # Verify current user is ADMIN
+        if current_user.role != UserRole.ADMIN:
+            print(f"User {current_user.email} is not admin")
+            raise HTTPException(
+                status_code=403,
+                detail="Solo los administradores pueden crear usuarios"
+            )
+
+        # Get company
+        company = db.query(Company).filter(
+            Company.id == user.company_id,
+            Company.admin_id == current_user.id
+        ).first()
+        
+        if not company:
+            print(f"Company {user.company_id} not found or not owned by {current_user.email}")
+            raise HTTPException(
+                status_code=403,
+                detail="No tiene permisos para crear usuarios en esta empresa"
+            )
+
+        print(f"Creating user in Cognito pool: {os.getenv('COGNITO_USER_POOL_ID')}")
+        # Create user in Cognito with email notification enabled
+        try:
+            cognito_response = cognito_client.admin_create_user(
+                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                Username=user.email,
+                UserAttributes=[
+                    {'Name': 'email', 'Value': user.email},
+                    {'Name': 'email_verified', 'Value': 'true'},
+                    {'Name': 'name', 'Value': user.name},
+                    {'Name': 'custom:role', 'Value': user.role}
+                ],
+                # Remove MessageAction='SUPPRESS' to enable email sending
+                TemporaryPassword='Temp@' + os.urandom(4).hex(),  # Generate random password
+                DesiredDeliveryMediums=['EMAIL']  # Specify email delivery
+            )
+            print(f"Cognito user created: {cognito_response['User']['Username']}")
+        except Exception as e:
+            print(f"Error creating Cognito user: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error creating Cognito user: {str(e)}"
+            )
+
+        # Add user to company's Cognito group
+        try:
+            print(f"Adding user to Cognito group: {company.cognito_group_id}")
+            cognito_client.admin_add_user_to_group(
+                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                Username=user.email,
+                GroupName=company.cognito_group_id
+            )
+        except Exception as e:
+            print(f"Error adding user to Cognito group: {str(e)}")
+            # Clean up Cognito user
+            cognito_client.admin_delete_user(
+                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                Username=user.email
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error adding user to group: {str(e)}"
+            )
+
+        # Create user in database
+        try:
+            db_user = User(
+                **user.model_dump(),
+                cognito_sub=cognito_response['User']['Username']
+            )
+            print(f"Creating user in database: {db_user.email}")
+            db.add(db_user)
+            db.commit()
+            db.refresh(db_user)
+            print(f"User created successfully: {db_user.id}")
+            return db_user
+        except Exception as e:
+            print(f"Error creating user in database: {str(e)}")
+            # Clean up Cognito
+            cognito_client.admin_delete_user(
+                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                Username=user.email
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error creating user in database: {str(e)}"
+            )
+
+    except Exception as e:
+        print(f"General error in create_user: {str(e)}")
+        db.rollback()
+        # Try to clean up Cognito user if created
+        try:
+            if 'cognito_response' in locals():
+                cognito_client.admin_delete_user(
+                    UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                    Username=user.email
+                )
+        except Exception as cleanup_error:
+            print(f"Error cleaning up Cognito user: {str(cleanup_error)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error creating user: {str(e)}"
         )
-        
-        # Save Cognito sub in database
-        db_user.cognito_sub = cognito_response['User']['Username']
-        
-        db.add(db_user)
+
+@app.get("/users/", response_model=List[UserResponse])
+def get_users(
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_active_user)
+):
+    # Get companies administered by current user
+    admin_companies = db.query(Company).filter(
+        Company.admin_id == current_user.id
+    ).all()
+    
+    # Get company IDs administered by current user
+    company_ids = [company.id for company in admin_companies]
+    
+    # Get users belonging to those companies
+    users = db.query(User).filter(User.company_id.in_(company_ids)).all()
+    return users
+
+@app.put("/users/profile", response_model=UserResponse)
+async def update_profile(
+    user_update: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Check if email is being changed
+        email_changed = user_update.email != current_user.email
+
+        # Update Cognito user
+        cognito_client.admin_update_user_attributes(
+            UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+            Username=current_user.email,
+            UserAttributes=[
+                {'Name': 'email', 'Value': user_update.email},
+                {'Name': 'name', 'Value': user_update.name}
+            ]
+        )
+
+        # Update database user
+        for key, value in user_update.model_dump().items():
+            if key != 'role':  # Don't allow role changes through profile update
+                setattr(current_user, key, value)
+
         db.commit()
-        db.refresh(db_user)
-        return db_user
+        db.refresh(current_user)
+        
+        # Return response with warning if email changed
+        response_data = current_user
+        if email_changed:
+            return JSONResponse(
+                content={
+                    "user": jsonable_encoder(response_data),
+                    "warning": "Su correo electrónico ha sido actualizado. Deberá iniciar sesión con el nuevo correo en su próximo acceso."
+                }
+            )
+        return current_user
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/users/", response_model=List[UserResponse])
-def get_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    users = db.query(User).all()
-    return users
 
 @app.post("/login")
 async def login(username: str = Form(), password: str = Form()):
@@ -395,3 +545,128 @@ async def delete_company(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/users/me", response_model=UserResponse)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get current user's profile"""
+    return current_user
+
+@app.get("/users/by-company/{company_id}", response_model=List[UserResponse])
+async def get_users_by_company(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get users for a specific company"""
+    # Verify company belongs to admin
+    company = db.query(Company).filter(
+        Company.id == company_id,
+        Company.admin_id == current_user.id
+    ).first()
+    
+    if not company:
+        raise HTTPException(
+            status_code=403,
+            detail="No tiene permisos para ver usuarios de esta empresa"
+        )
+
+    users = db.query(User).filter(User.company_id == company_id).all()
+    return users
+
+@app.put("/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: UUID,
+    user_update: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Get existing user
+        db_user = db.query(User).filter(User.id == user_id).first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Verify admin has access to this user's company
+        company = db.query(Company).filter(
+            Company.id == db_user.company_id,
+            Company.admin_id == current_user.id
+        ).first()
+        
+        if not company:
+            raise HTTPException(
+                status_code=403,
+                detail="No tiene permisos para modificar este usuario"
+            )
+
+        # Update Cognito user
+        cognito_client.admin_update_user_attributes(
+            UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+            Username=db_user.email,
+            UserAttributes=[
+                {'Name': 'email', 'Value': user_update.email},
+                {'Name': 'name', 'Value': user_update.name},
+                {'Name': 'custom:role', 'Value': user_update.role}  # Update role in Cognito
+            ]
+        )
+
+        # Update database user
+        for key, value in user_update.model_dump().items():
+            setattr(db_user, key, value)
+
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/users/{user_id}")
+async def delete_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Get user to delete
+        db_user = db.query(User).filter(User.id == user_id).first()
+        if not db_user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Verify admin has access to this user's company
+        company = db.query(Company).filter(
+            Company.id == db_user.company_id,
+            Company.admin_id == current_user.id
+        ).first()
+        
+        if not company:
+            raise HTTPException(
+                status_code=403,
+                detail="No tiene permisos para eliminar este usuario"
+            )
+
+        # Delete user from Cognito
+        try:
+            cognito_client.admin_delete_user(
+                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                Username=db_user.email
+            )
+        except Exception as e:
+            print(f"Error deleting user from Cognito: {str(e)}")
+            # Continue with database deletion even if Cognito fails
+            # The user might not exist in Cognito
+
+        # Delete user from database
+        db.delete(db_user)
+        db.commit()
+        
+        return {"message": "Usuario eliminado exitosamente"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error deleting user: {str(e)}"
+        )

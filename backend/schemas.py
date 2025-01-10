@@ -8,11 +8,19 @@ class UserCreate(BaseModel):
     name: str
     email: str
     role: UserRole
+    identification: Optional[str] = None  # Make identification optional
     status: Optional[str] = "active"
+    company_id: Optional[UUID] = None
 
-class UserResponse(UserCreate):
+class UserResponse(BaseModel):
     id: UUID
-    cognito_sub: Optional[str] = None  # Make cognito_sub optional
+    name: str
+    email: str
+    role: UserRole
+    identification: Optional[str] = None  # Make identification optional
+    status: str
+    cognito_sub: Optional[str] = None
+    company_id: Optional[UUID] = None
     
     class Config:
         from_attributes = True
