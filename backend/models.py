@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Table, Enum
+from sqlalchemy import Column, String, DateTime, ForeignKey, Table, Enum, Integer
 from sqlalchemy.dialects.postgresql import UUID, ENUM
 from sqlalchemy.orm import relationship
 from db import Base 
@@ -14,6 +14,14 @@ class UserRole(str, enum.Enum):
     TECNICO = "TECNICO"
     JEFE_TALLER = "JEFE_TALLER"
     ADMINISTRATIVO = "ADMINISTRATIVO"
+
+class VehicleStatus(str, enum.Enum):
+    ACTIVO = "ACTIVO"
+    EN_RUTA = "EN_RUTA"
+    MANTENIMIENTO = "MANTENIMIENTO"
+    INACTIVO = "INACTIVO"
+    BAJA = "BAJA"
+    AVERIADO = "AVERIADO"
 
 class User(Base):
     __tablename__ = "users"
@@ -52,3 +60,24 @@ class Company(Base):
     
     # Relación con los usuarios que pertenecen a la empresa
     users = relationship("User", back_populates="company", foreign_keys="User.company_id")
+
+    # Relación con los vehículos que pertenecen a la empresa
+    vehicles = relationship("Vehicle", back_populates="company")
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    brand = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    year = Column(Integer, nullable=False)
+    vehicle_type = Column(String, nullable=False)
+    plate_number = Column(String, unique=True, nullable=False)
+    company_number = Column(String, nullable=False)
+    vin = Column(String, unique=True, nullable=True)
+    status = Column(ENUM(VehicleStatus, name='vehicle_status', create_type=False), default=VehicleStatus.ACTIVO)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'), nullable=False)
+
+    # Relationship with company
+    company = relationship("Company", back_populates="vehicles")

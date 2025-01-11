@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from uuid import UUID
 from typing import Optional
-from models import UserRole
+from models import UserRole, VehicleStatus  # Add VehicleStatus here
 from datetime import datetime
 
 class UserCreate(BaseModel):
@@ -37,6 +37,24 @@ class CompanyResponse(CompanyCreate):
     cognito_group_id: str
     created_at: datetime
     status: str
+
+    class Config:
+        from_attributes = True
+
+class VehicleCreate(BaseModel):
+    brand: str
+    model: str
+    year: int
+    vehicle_type: str
+    plate_number: str
+    company_number: str
+    vin: Optional[str] = None
+    company_id: UUID
+
+class VehicleResponse(VehicleCreate):
+    id: UUID
+    status: VehicleStatus
+    created_at: datetime
 
     class Config:
         from_attributes = True

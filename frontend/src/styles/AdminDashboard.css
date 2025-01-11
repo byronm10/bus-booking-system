@@ -200,3 +200,41 @@
 .detail-value {
   flex: 1;
 }
+
+.vehicles-section {
+  margin-top: 2rem;
+}
+
+.vehicle-form {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.vehicle-form input,
+.vehicle-form select {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+}
+
+.vehicle-form input[type="number"] {
+  width: 100px;
+}
+
+.status-select {
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.status-activo { background-color: #28a745; color: white; }
+.status-en_ruta { background-color: #007bff; color: white; }
+.status-mantenimiento { background-color: #ffc107; color: black; }
+.status-inactivo { background-color: #6c757d; color: white; }
+.status-baja { background-color: #dc3545; color: white; }
+.status-averiado { background-color: #dc3545; color: white; }

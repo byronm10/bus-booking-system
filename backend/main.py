@@ -1,8 +1,15 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Form, Request
 from sqlalchemy.orm import Session
 from db import get_db, Base, engine
-from models import User, UserRole, Company 
-from schemas import UserCreate, UserResponse, CompanyCreate, CompanyResponse  
+from models import User, UserRole, Company, Vehicle, VehicleStatus  # Add VehicleStatus here
+from schemas import (
+    UserCreate, 
+    UserResponse, 
+    CompanyCreate, 
+    CompanyResponse,
+    VehicleCreate,    # Add this
+    VehicleResponse   # Add this
+)
 from typing import List
 from uuid import UUID
 from sqlalchemy import create_engine, text
@@ -669,4 +676,326 @@ async def delete_user(
         raise HTTPException(
             status_code=500, 
             detail=f"Error deleting user: {str(e)}"
+        )
+
+@app.post("/vehicles/", response_model=VehicleResponse)
+async def create_vehicle(
+    vehicle: VehicleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        print(f"Creating vehicle request received from user: {current_user.email} (role: {current_user.role})")
+        print(f"Vehicle data: {vehicle.model_dump()}")
+
+        # Convert empty string VIN to None
+        if not vehicle.vin:
+            vehicle.vin = None
+
+        # Check if user has permission (ADMIN or ADMINISTRATIVO)
+        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+            print(f"Permission denied: User {current_user.email} with role {current_user.role} attempted to create vehicle")
+            raise HTTPException(
+                status_code=403,
+                detail="Solo administradores y administrativos pueden crear vehículos"
+            )
+
+        # Get company and verify ownership
+        company = db.query(Company).filter(
+            Company.id == vehicle.company_id,
+            Company.admin_id == current_user.id
+        ).first()
+        
+        print(f"Checking company access - Company ID: {vehicle.company_id}, Admin ID: {current_user.id}")
+        if not company:
+            print(f"Company access denied: Company {vehicle.company_id} not found or not owned by {current_user.email}")
+            raise HTTPException(
+                status_code=403,
+                detail="No tiene permisos para añadir vehículos a esta empresa"
+            )
+
+        print(f"Company verification successful: {company.name}")
+
+        # Check for duplicate plate number
+        existing_vehicle = db.query(Vehicle).filter(
+            Vehicle.plate_number == vehicle.plate_number
+        ).first()
+        if existing_vehicle:
+            print(f"Duplicate plate number found: {vehicle.plate_number}")
+            raise HTTPException(
+                status_code=400,
+                detail="Ya existe un vehículo con este número de placa"
+            )
+
+        # Check for duplicate company number within the same company
+        existing_company_number = db.query(Vehicle).filter(
+            Vehicle.company_number == vehicle.company_number,
+            Vehicle.company_id == vehicle.company_id
+        ).first()
+        if existing_company_number:
+            print(f"Duplicate company number found: {vehicle.company_number} in company {company.name}")
+            raise HTTPException(
+                status_code=400,
+                detail="Ya existe un vehículo con este número en la empresa"
+            )
+
+        # Create vehicle
+        try:
+            print("Attempting to create vehicle in database")
+            db_vehicle = Vehicle(**vehicle.model_dump())
+            db.add(db_vehicle)
+            db.commit()
+            db.refresh(db_vehicle)
+            print(f"Vehicle created successfully: ID {db_vehicle.id}")
+            return db_vehicle
+        except Exception as db_error:
+            print(f"Database error while creating vehicle: {str(db_error)}")
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al crear el vehículo en la base de datos: {str(db_error)}"
+            )
+
+    except HTTPException as http_error:
+        # Re-raise HTTP exceptions with their original status codes
+        raise http_error
+    except Exception as e:
+        print(f"Unexpected error in create_vehicle: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error inesperado al crear el vehículo: {str(e)}"
+        )
+
+@app.get("/vehicles/", response_model=List[VehicleResponse])
+async def get_vehicles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Get companies administered by current user
+        admin_companies = db.query(Company).filter(
+            Company.admin_id == current_user.id
+        ).all()
+        
+        company_ids = [company.id for company in admin_companies]
+        
+        # Get vehicles for those companies
+        vehicles = db.query(Vehicle).filter(
+            Vehicle.company_id.in_(company_ids)
+        ).all()
+        
+        return vehicles
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching vehicles: {str(e)}"
+        )
+
+@app.get("/vehicles/{vehicle_id}", response_model=VehicleResponse)
+async def get_vehicle(
+    vehicle_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    vehicle = db.query(Vehicle).filter(
+        Vehicle.id == vehicle_id,
+        Vehicle.company_id.in_(
+            db.query(Company.id).filter(Company.admin_id == current_user.id)
+        )
+    ).first()
+    
+    if not vehicle:
+        raise HTTPException(
+            status_code=404,
+            detail="Vehículo no encontrado o no tiene permisos para verlo"
+        )
+    
+    return vehicle
+
+@app.put("/vehicles/{vehicle_id}/status", response_model=VehicleResponse)
+async def update_vehicle_status(
+    vehicle_id: UUID,
+    data: dict,  # Change to accept dict instead of direct VehicleStatus
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        print(f"Updating vehicle status - Vehicle ID: {vehicle_id}")
+        print(f"Request data: {data}")
+        print(f"Request from user: {current_user.email} (role: {current_user.role})")
+
+        # Convert string status to enum
+        try:
+            new_status = VehicleStatus(data.get('status'))
+        except ValueError as e:
+            print(f"Invalid status value: {data.get('status')}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Estado de vehículo inválido. Valores permitidos: {[status.value for status in VehicleStatus]}"
+            )
+
+        # Check permissions
+        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO, UserRole.JEFE_TALLER]:
+            print(f"Permission denied for user {current_user.email}")
+            raise HTTPException(
+                status_code=403,
+                detail="No tiene permisos para actualizar el estado del vehículo"
+            )
+
+        # Get vehicle and verify ownership
+        vehicle = db.query(Vehicle).filter(
+            Vehicle.id == vehicle_id,
+            Vehicle.company_id.in_(
+                db.query(Company.id).filter(Company.admin_id == current_user.id)
+            )
+        ).first()
+
+        if not vehicle:
+            print(f"Vehicle {vehicle_id} not found or access denied")
+            raise HTTPException(
+                status_code=404,
+                detail="Vehículo no encontrado o no tiene permisos para modificarlo"
+            )
+
+        print(f"Current vehicle status: {vehicle.status}")
+        print(f"Updating to new status: {new_status}")
+
+        # Update status
+        vehicle.status = new_status
+        db.commit()
+        db.refresh(vehicle)
+        
+        print(f"Vehicle status updated successfully")
+        return vehicle
+
+    except HTTPException as http_error:
+        raise http_error
+    except Exception as e:
+        print(f"Error updating vehicle status: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al actualizar el estado del vehículo: {str(e)}"
+        )
+
+@app.put("/vehicles/{vehicle_id}", response_model=VehicleResponse)
+async def update_vehicle(
+    vehicle_id: UUID,
+    vehicle_update: VehicleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        print(f"Updating vehicle - Vehicle ID: {vehicle_id}")
+        print(f"Update data: {vehicle_update.model_dump()}")
+        print(f"Request from user: {current_user.email} (role: {current_user.role})")
+
+        # Check permissions
+        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+            print(f"Permission denied for user {current_user.email}")
+            raise HTTPException(
+                status_code=403,
+                detail="Solo administradores y administrativos pueden modificar vehículos"
+            )
+
+        # Get vehicle and verify ownership
+        vehicle = db.query(Vehicle).filter(
+            Vehicle.id == vehicle_id,
+            Vehicle.company_id.in_(
+                db.query(Company.id).filter(Company.admin_id == current_user.id)
+            )
+        ).first()
+
+        if not vehicle:
+            raise HTTPException(
+                status_code=404,
+                detail="Vehículo no encontrado o no tiene permisos para modificarlo"
+            )
+
+        # Check for duplicate plate number if changed
+        if vehicle_update.plate_number != vehicle.plate_number:
+            existing_vehicle = db.query(Vehicle).filter(
+                Vehicle.plate_number == vehicle_update.plate_number,
+                Vehicle.id != vehicle_id
+            ).first()
+            if existing_vehicle:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ya existe un vehículo con este número de placa"
+                )
+
+        # Check for duplicate company number if changed
+        if vehicle_update.company_number != vehicle.company_number:
+            existing_company_number = db.query(Vehicle).filter(
+                Vehicle.company_number == vehicle_update.company_number,
+                Vehicle.company_id == vehicle_update.company_id,
+                Vehicle.id != vehicle_id
+            ).first()
+            if existing_company_number:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ya existe un vehículo con este número en la empresa"
+                )
+
+        # Update vehicle fields
+        for key, value in vehicle_update.model_dump().items():
+            setattr(vehicle, key, value)
+
+        db.commit()
+        db.refresh(vehicle)
+        print(f"Vehicle updated successfully")
+        return vehicle
+
+    except Exception as e:
+        print(f"Error updating vehicle: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al actualizar el vehículo: {str(e)}"
+        )
+
+@app.delete("/vehicles/{vehicle_id}")
+async def delete_vehicle(
+    vehicle_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        print(f"Deleting vehicle - Vehicle ID: {vehicle_id}")
+        print(f"Request from user: {current_user.email} (role: {current_user.role})")
+
+        # Check permissions
+        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+            raise HTTPException(
+                status_code=403,
+                detail="Solo administradores y administrativos pueden eliminar vehículos"
+            )
+
+        # Get vehicle and verify ownership
+        vehicle = db.query(Vehicle).filter(
+            Vehicle.id == vehicle_id,
+            Vehicle.company_id.in_(
+                db.query(Company.id).filter(Company.admin_id == current_user.id)
+            )
+        ).first()
+
+        if not vehicle:
+            raise HTTPException(
+                status_code=404,
+                detail="Vehículo no encontrado o no tiene permisos para eliminarlo"
+            )
+
+        # Delete vehicle
+        db.delete(vehicle)
+        db.commit()
+        print(f"Vehicle deleted successfully")
+        return {"message": "Vehículo eliminado exitosamente"}
+
+    except Exception as e:
+        print(f"Error deleting vehicle: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al eliminar el vehículo: {str(e)}"
         )

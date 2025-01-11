@@ -36,6 +36,19 @@ const AdminDashboard = () => {
   const [showEmailWarning, setShowEmailWarning] = useState(false);
   const [showUserDetails, setShowUserDetails] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [vehicles, setVehicles] = useState([]);
+  const [showCreateVehicle, setShowCreateVehicle] = useState(false);
+  const [vehicleFormData, setVehicleFormData] = useState({
+    brand: '',
+    model: '',
+    year: new Date().getFullYear(),
+    vehicle_type: '',
+    plate_number: '',
+    company_number: '',
+    vin: '',
+    company_id: ''
+  });
+  const [editingVehicle, setEditingVehicle] = useState(null);
   const navigate = useNavigate();
 
   const fetchUsers = async () => {
@@ -102,10 +115,25 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchVehicles = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/vehicles/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setVehicles(response.data);
+    } catch (err) {
+      setError('Error al cargar vehículos');
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchCompanies();
     fetchCurrentUser();
+    fetchVehicles();
   }, [navigate]);
 
   const handleCreateCompany = async (e) => {
@@ -312,6 +340,115 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error('Error updating user:', err.response?.data?.detail || err.message);
       setError(err.response?.data?.detail || 'Error al actualizar el usuario');
+    }
+  };
+
+  const handleCreateVehicle = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/vehicles/`, vehicleFormData, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setShowCreateVehicle(false);
+      fetchVehicles();
+      setVehicleFormData({
+        brand: '',
+        model: '',
+        year: new Date().getFullYear(),
+        vehicle_type: '',
+        plate_number: '',
+        company_number: '',
+        vin: '',
+        company_id: ''
+      });
+    } catch (err) {
+      setError('Error al crear el vehículo');
+    }
+  };
+
+  const handleUpdateVehicleStatus = async (vehicleId, newStatus) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(
+        `${process.env.REACT_APP_BACKEND_URL}/vehicles/${vehicleId}/status`,
+        { status: newStatus },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      fetchVehicles();
+    } catch (err) {
+      setError('Error al actualizar el estado del vehículo');
+    }
+  };
+
+  const startEditingVehicle = (vehicle) => {
+    setEditingVehicle(vehicle);
+    setVehicleFormData({
+      brand: vehicle.brand,
+      model: vehicle.model,
+      year: vehicle.year,
+      vehicle_type: vehicle.vehicle_type,
+      plate_number: vehicle.plate_number,
+      company_number: vehicle.company_number,
+      vin: vehicle.vin || '',
+      company_id: vehicle.company_id
+    });
+    setShowCreateVehicle(true);
+  };
+
+  const handleUpdateVehicle = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(
+        `${process.env.REACT_APP_BACKEND_URL}/vehicles/${editingVehicle.id}`,
+        vehicleFormData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      setShowCreateVehicle(false);
+      setEditingVehicle(null);
+      fetchVehicles();
+      setVehicleFormData({
+        brand: '',
+        model: '',
+        year: new Date().getFullYear(),
+        vehicle_type: '',
+        plate_number: '',
+        company_number: '',
+        vin: '',
+        company_id: ''
+      });
+    } catch (err) {
+      setError('Error al actualizar el vehículo');
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId) => {
+    if (window.confirm('¿Está seguro de eliminar este vehículo? Esta acción no se puede deshacer.')) {
+      try {
+        const token = localStorage.getItem('token');
+        await axios.delete(
+          `${process.env.REACT_APP_BACKEND_URL}/vehicles/${vehicleId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        fetchVehicles();
+      } catch (err) {
+        setError('Error al eliminar el vehículo');
+      }
     }
   };
 
@@ -701,6 +838,166 @@ const AdminDashboard = () => {
             </div>
           )}
         </div>
+
+        <section className="vehicles-section">
+          <div className="section-header">
+            <h2>Vehículos</h2>
+            <button onClick={() => setShowCreateVehicle(true)} className="create-button">
+              Crear Vehículo
+            </button>
+          </div>
+
+          {showCreateVehicle && (
+            <form onSubmit={editingVehicle ? handleUpdateVehicle : handleCreateVehicle} className="vehicle-form">
+              <input
+                type="text"
+                placeholder="Marca"
+                value={vehicleFormData.brand}
+                onChange={(e) => setVehicleFormData({...vehicleFormData, brand: e.target.value})}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Modelo"
+                value={vehicleFormData.model}
+                onChange={(e) => setVehicleFormData({...vehicleFormData, model: e.target.value})}
+                required
+              />
+              <input
+                type="number"
+                placeholder="Año"
+                value={vehicleFormData.year}
+                onChange={(e) => setVehicleFormData({...vehicleFormData, year: parseInt(e.target.value)})}
+                required
+              />
+              <select
+                value={vehicleFormData.vehicle_type}
+                onChange={(e) => setVehicleFormData({...vehicleFormData, vehicle_type: e.target.value})}
+                required
+              >
+                <option value="">Seleccionar tipo de vehículo</option>
+                <option value="BUS">Autobús</option>
+                <option value="CAMION">Camión</option>
+                <option value="FURGONETA">Furgoneta</option>
+                <option value="COCHE">Coche</option>
+                <option value="MOTO">Moto</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Número de placa"
+                value={vehicleFormData.plate_number}
+                onChange={(e) => setVehicleFormData({...vehicleFormData, plate_number: e.target.value})}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Número del vehículo en la empresa"
+                value={vehicleFormData.company_number}
+                onChange={(e) => setVehicleFormData({...vehicleFormData, company_number: e.target.value})}
+                required
+              />
+              <input
+                type="text"
+                placeholder="VIN (opcional)"
+                value={vehicleFormData.vin}
+                onChange={(e) => setVehicleFormData({...vehicleFormData, vin: e.target.value})}
+              />
+              <select
+                value={vehicleFormData.company_id}
+                onChange={(e) => setVehicleFormData({...vehicleFormData, company_id: e.target.value})}
+                required
+              >
+                <option value="">Seleccionar empresa</option>
+                {companies.map(company => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+              <div className="form-buttons">
+                <button type="submit">{editingVehicle ? 'Actualizar' : 'Crear'}</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowCreateVehicle(false);
+                    setEditingVehicle(null);
+                    setVehicleFormData({
+                      brand: '',
+                      model: '',
+                      year: new Date().getFullYear(),
+                      vehicle_type: '',
+                      plate_number: '',
+                      company_number: '',
+                      vin: '',
+                      company_id: ''
+                    });
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+
+          <table>
+            <thead>
+              <tr>
+                <th>Marca</th>
+                <th>Modelo</th>
+                <th>Año</th>
+                <th>Tipo</th>
+                <th>Placa</th>
+                <th>Número</th>
+                <th>VIN</th>
+                <th>Empresa</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vehicles.map(vehicle => (
+                <tr key={vehicle.id}>
+                  <td>{vehicle.brand}</td>
+                  <td>{vehicle.model}</td>
+                  <td>{vehicle.year}</td>
+                  <td>{vehicle.vehicle_type}</td>
+                  <td>{vehicle.plate_number}</td>
+                  <td>{vehicle.company_number}</td>
+                  <td>{vehicle.vin || '-'}</td>
+                  <td>{companies.find(c => c.id === vehicle.company_id)?.name || '-'}</td>
+                  <td>
+                    <select
+                      value={vehicle.status}
+                      onChange={(e) => handleUpdateVehicleStatus(vehicle.id, e.target.value)}
+                      className={`status-select status-${vehicle.status.toLowerCase()}`}
+                    >
+                      <option value="ACTIVO">Activo</option>
+                      <option value="EN_RUTA">En Ruta</option>
+                      <option value="MANTENIMIENTO">Mantenimiento</option>
+                      <option value="INACTIVO">Inactivo</option>
+                      <option value="BAJA">Baja</option>
+                      <option value="AVERIADO">Averiado</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button 
+                      onClick={() => startEditingVehicle(vehicle)}
+                      className="edit-button"
+                    >
+                      Editar
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteVehicle(vehicle.id)}
+                      className="delete-button"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
       </div>
     </div>
   );
