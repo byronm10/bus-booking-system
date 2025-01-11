@@ -1,5 +1,5 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Table, Enum, Integer
-from sqlalchemy.dialects.postgresql import UUID, ENUM
+from sqlalchemy import Column, String, DateTime, ForeignKey, Table, Enum, Integer, func
+from sqlalchemy.dialects.postgresql import UUID, ENUM, JSONB
 from sqlalchemy.orm import relationship
 from db import Base 
 import uuid
@@ -22,6 +22,17 @@ class VehicleStatus(str, enum.Enum):
     INACTIVO = "INACTIVO"
     BAJA = "BAJA"
     AVERIADO = "AVERIADO"
+
+class RouteStatus(str, enum.Enum):
+    ACTIVA = "ACTIVA"
+    EN_EJECUCION = "EN_EJECUCION"
+    COMPLETADA = "COMPLETADA"
+    SUSPENDIDA = "SUSPENDIDA"
+
+class RepetitionPeriod(str, enum.Enum):
+    DIARIO = "DIARIO"
+    SEMANAL = "SEMANAL"
+    MENSUAL = "MENSUAL"
 
 class User(Base):
     __tablename__ = "users"
@@ -64,6 +75,9 @@ class Company(Base):
     # Relación con los vehículos que pertenecen a la empresa
     vehicles = relationship("Vehicle", back_populates="company")
 
+    # Relación con las rutas que pertenecen a la empresa
+    routes = relationship("Route", back_populates="company")
+
 class Vehicle(Base):
     __tablename__ = "vehicles"
 
@@ -81,3 +95,57 @@ class Vehicle(Base):
 
     # Relationship with company
     company = relationship("Company", back_populates="vehicles")
+
+    # Relationship with route executions
+    route_executions = relationship("RouteExecution", back_populates="vehicle")
+
+    # Relationship with routes
+    routes = relationship("Route", back_populates="vehicle")
+
+class Route(Base):
+    __tablename__ = "routes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'), nullable=False)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey('vehicles.id'), nullable=True)  # Add this line
+    
+    # Basic route info
+    name = Column(String, nullable=False)
+    start_point = Column(String, nullable=False)
+    end_point = Column(String, nullable=False)
+    intermediate_stops = Column(JSONB, nullable=True)  # List of stops with coordinates and times
+    
+    # Schedule
+    departure_time = Column(DateTime(timezone=True), nullable=False)
+    estimated_duration = Column(Integer, nullable=False)  # Duration in minutes
+    repetition_frequency = Column(Integer, nullable=True)  # Number of repetitions
+    repetition_period = Column(ENUM(RepetitionPeriod, name='repetition_period', create_type=False), nullable=True)
+    
+    # Status and tracking
+    status = Column(ENUM(RouteStatus, name='route_status', create_type=False), default=RouteStatus.ACTIVA)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    company = relationship("Company", back_populates="routes")
+    executions = relationship("RouteExecution", back_populates="route", cascade="all, delete-orphan")
+    vehicle = relationship("Vehicle", back_populates="routes")  # Add relationship
+
+class RouteExecution(Base):
+    __tablename__ = "route_executions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    route_id = Column(UUID(as_uuid=True), ForeignKey('routes.id'), nullable=False)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey('vehicles.id'), nullable=False)
+    
+    actual_start_time = Column(DateTime(timezone=True))
+    actual_end_time = Column(DateTime(timezone=True))
+    actual_duration = Column(Integer)  # Duration in minutes
+    incidents = Column(JSONB, nullable=True)  # List of incidents during execution
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(ENUM(RouteStatus, name='route_status', create_type=False), default=RouteStatus.ACTIVA)
+    
+    # Relationships
+    route = relationship("Route", back_populates="executions")
+    vehicle = relationship("Vehicle", back_populates="route_executions")

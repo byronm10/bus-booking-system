@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from uuid import UUID
-from typing import Optional
-from models import UserRole, VehicleStatus  # Add VehicleStatus here
+from typing import Optional, List
+from models import UserRole, VehicleStatus, RouteStatus, RepetitionPeriod  # Add RouteStatus and RepetitionPeriod here
 from datetime import datetime
 
 class UserCreate(BaseModel):
@@ -54,6 +54,48 @@ class VehicleCreate(BaseModel):
 class VehicleResponse(VehicleCreate):
     id: UUID
     status: VehicleStatus
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class IntermediateStop(BaseModel):
+    location: str
+    coordinates: Optional[dict]
+    estimated_stop_time: int  # minutes
+
+class RouteCreate(BaseModel):
+    name: str
+    start_point: str
+    end_point: str
+    intermediate_stops: Optional[List[IntermediateStop]] = None
+    departure_time: datetime
+    estimated_duration: int
+    repetition_frequency: Optional[int] = None
+    repetition_period: Optional[RepetitionPeriod] = None
+    company_id: UUID
+    vehicle_id: Optional[UUID] = None  # Optional manual vehicle assignment
+
+class RouteResponse(RouteCreate):
+    id: UUID
+    status: RouteStatus
+    created_at: datetime
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+class RouteExecutionCreate(BaseModel):
+    route_id: UUID
+    vehicle_id: UUID
+    actual_start_time: Optional[datetime] = None
+    actual_end_time: Optional[datetime] = None
+    actual_duration: Optional[int] = None
+    incidents: Optional[List[dict]] = None
+
+class RouteExecutionResponse(RouteExecutionCreate):
+    id: UUID
+    status: RouteStatus
     created_at: datetime
 
     class Config:

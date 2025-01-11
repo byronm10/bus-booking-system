@@ -238,3 +238,58 @@
 .status-inactivo { background-color: #6c757d; color: white; }
 .status-baja { background-color: #dc3545; color: white; }
 .status-averiado { background-color: #dc3545; color: white; }
+
+.routes-section {
+  margin-top: 2rem;
+}
+
+.route-form {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.route-form input,
+.route-form select {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+}
+
+.status-activa { background-color: #28a745; color: white; }
+.status-en_ejecucion { background-color: #007bff; color: white; }
+.status-completada { background-color: #6c757d; color: white; }
+.status-suspendida { background-color: #dc3545; color: white; }
+
+.datetime-inputs {
+  display: flex;
+  gap: 1rem;
+}
+
+.datetime-inputs input {
+  flex: 1;
+}
+
+.duration-inputs {
+  display: flex;
+  gap: 1rem;
+}
+
+.duration-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.duration-field label {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.duration-field input {
+  width: 80px;
+}

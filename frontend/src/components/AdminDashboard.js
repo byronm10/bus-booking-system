@@ -49,6 +49,21 @@ const AdminDashboard = () => {
     company_id: ''
   });
   const [editingVehicle, setEditingVehicle] = useState(null);
+  const [routes, setRoutes] = useState([]);
+  const [showCreateRoute, setShowCreateRoute] = useState(false);
+  const [routeFormData, setRouteFormData] = useState({
+    name: '',
+    start_point: '',
+    end_point: '',
+    intermediate_stops: [],
+    departure_time: '',
+    estimated_duration: 0,
+    repetition_frequency: null,
+    repetition_period: null,
+    company_id: '',
+    vehicle_id: null
+  });
+  const [editingRoute, setEditingRoute] = useState(null);
   const navigate = useNavigate();
 
   const fetchUsers = async () => {
@@ -129,11 +144,26 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchRoutes = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/routes/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setRoutes(response.data);
+    } catch (err) {
+      setError('Error al cargar rutas');
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchCompanies();
     fetchCurrentUser();
     fetchVehicles();
+    fetchRoutes();  // Add this
   }, [navigate]);
 
   const handleCreateCompany = async (e) => {
@@ -452,6 +482,118 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleCreateRoute = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/routes/`, routeFormData, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      setShowCreateRoute(false);
+      fetchRoutes();
+      setRouteFormData({
+        name: '',
+        start_point: '',
+        end_point: '',
+        intermediate_stops: [],
+        departure_time: '',
+        estimated_duration: 0,
+        repetition_frequency: null,
+        repetition_period: null,
+        company_id: '',
+        vehicle_id: null
+      });
+    } catch (err) {
+      setError('Error al crear la ruta');
+    }
+  };
+
+  const handleUpdateRoute = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(
+        `${process.env.REACT_APP_BACKEND_URL}/routes/${editingRoute.id}`,
+        routeFormData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      setShowCreateRoute(false);
+      setEditingRoute(null);
+      fetchRoutes();
+      setRouteFormData({
+        name: '',
+        start_point: '',
+        end_point: '',
+        intermediate_stops: [],
+        departure_time: '',
+        estimated_duration: 0,
+        repetition_frequency: null,
+        repetition_period: null,
+        company_id: '',
+        vehicle_id: null
+      });
+    } catch (err) {
+      setError('Error al actualizar la ruta');
+    }
+  };
+
+  const handleRouteStatusChange = async (routeId, newStatus) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(
+        `${process.env.REACT_APP_BACKEND_URL}/routes/${routeId}/status`,
+        { status: newStatus },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      fetchRoutes();
+    } catch (err) {
+      setError('Error al actualizar el estado de la ruta');
+    }
+  };
+
+  const handleDeleteRoute = async (routeId) => {
+    if (window.confirm('¿Está seguro de eliminar esta ruta? Esta acción no se puede deshacer.')) {
+      try {
+        const token = localStorage.getItem('token');
+        await axios.delete(`${process.env.REACT_APP_BACKEND_URL}/routes/${routeId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        fetchRoutes();
+      } catch (err) {
+        setError('Error al eliminar la ruta');
+      }
+    }
+  };
+
+  const startEditingRoute = (route) => {
+    setEditingRoute(route);
+    setRouteFormData({
+      name: route.name,
+      start_point: route.start_point,
+      end_point: route.end_point,
+      intermediate_stops: route.intermediate_stops || [],
+      departure_time: new Date(route.departure_time).toISOString().slice(0, 16),
+      estimated_duration: route.estimated_duration,
+      repetition_frequency: route.repetition_frequency,
+      repetition_period: route.repetition_period,
+      company_id: route.company_id,
+      vehicle_id: route.vehicle_id
+    });
+    setShowCreateRoute(true);
+  };
+
   const showUserDetailsModal = (user) => {
     setSelectedUser(user);
     setShowUserDetails(true);
@@ -474,9 +616,11 @@ const AdminDashboard = () => {
           </button>
         </div>
       </div>
+
+      {/* Error message */}
       {error && <div className="error">{error}</div>}
 
-      {/* Add Profile Edit Modal */}
+      {/* Profile Edit Modal */}
       {showProfileEdit && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -988,6 +1132,239 @@ const AdminDashboard = () => {
                     </button>
                     <button 
                       onClick={() => handleDeleteVehicle(vehicle.id)}
+                      className="delete-button"
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="routes-section">
+          <div className="section-header">
+            <h2>Rutas</h2>
+            <button onClick={() => setShowCreateRoute(true)} className="create-button">
+              Crear Ruta
+            </button>
+          </div>
+
+          {showCreateRoute && (
+            <form onSubmit={editingRoute ? handleUpdateRoute : handleCreateRoute} className="route-form">
+              <input
+                type="text"
+                placeholder="Nombre de la ruta"
+                value={routeFormData.name}
+                onChange={(e) => setRouteFormData({...routeFormData, name: e.target.value})}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Punto de inicio"
+                value={routeFormData.start_point}
+                onChange={(e) => setRouteFormData({...routeFormData, start_point: e.target.value})}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Punto final"
+                value={routeFormData.end_point}
+                onChange={(e) => setRouteFormData({...routeFormData, end_point: e.target.value})}
+                required
+              />
+              
+              {/* Date and Time inputs */}
+              <div className="datetime-inputs">
+                <input
+                  type="date"
+                  value={routeFormData.departure_time.split('T')[0]}
+                  onChange={(e) => {
+                    const time = routeFormData.departure_time.split('T')[1] || '00:00';
+                    setRouteFormData({
+                      ...routeFormData,
+                      departure_time: `${e.target.value}T${time}`
+                    });
+                  }}
+                  required
+                />
+                <input
+                  type="time"
+                  value={routeFormData.departure_time.split('T')[1] || ''}
+                  onChange={(e) => {
+                    const date = routeFormData.departure_time.split('T')[0];
+                    setRouteFormData({
+                      ...routeFormData,
+                      departure_time: `${date}T${e.target.value}`
+                    });
+                  }}
+                  required
+                />
+              </div>
+
+              {/* Duration inputs */}
+              <div className="duration-inputs">
+                <div className="duration-field">
+                  <label>Días:</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={Math.floor(routeFormData.estimated_duration / 1440)}
+                    onChange={(e) => {
+                      const days = parseInt(e.target.value) || 0;
+                      const remainingMinutes = routeFormData.estimated_duration % 1440;
+                      setRouteFormData({
+                        ...routeFormData,
+                        estimated_duration: (days * 1440) + remainingMinutes
+                      });
+                    }}
+                  />
+                </div>
+                <div className="duration-field">
+                  <label>Horas:</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={Math.floor((routeFormData.estimated_duration % 1440) / 60)}
+                    onChange={(e) => {
+                      const hours = parseInt(e.target.value) || 0;
+                      const days = Math.floor(routeFormData.estimated_duration / 1440);
+                      const minutes = routeFormData.estimated_duration % 60;
+                      setRouteFormData({
+                        ...routeFormData,
+                        estimated_duration: (days * 1440) + (hours * 60) + minutes
+                      });
+                    }}
+                  />
+                </div>
+                <div className="duration-field">
+                  <label>Minutos:</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={routeFormData.estimated_duration % 60}
+                    onChange={(e) => {
+                      const minutes = parseInt(e.target.value) || 0;
+                      const days = Math.floor(routeFormData.estimated_duration / 1440);
+                      const hours = Math.floor((routeFormData.estimated_duration % 1440) / 60);
+                      setRouteFormData({
+                        ...routeFormData,
+                        estimated_duration: (days * 1440) + (hours * 60) + minutes
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Company selection */}
+              <select
+                value={routeFormData.company_id}
+                onChange={(e) => {
+                  setRouteFormData({
+                    ...routeFormData,
+                    company_id: e.target.value,
+                    vehicle_id: null  // Reset vehicle when company changes
+                  });
+                }}
+                required
+              >
+                <option value="">Seleccionar empresa</option>
+                {companies.map(company => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Vehicle selection */}
+              <select
+                value={routeFormData.vehicle_id || ''}
+                onChange={(e) => setRouteFormData({...routeFormData, vehicle_id: e.target.value || null})}
+              >
+                <option value="">Seleccionar vehículo (opcional)</option>
+                {vehicles
+                  .filter(v => v.company_id === routeFormData.company_id && v.status === 'ACTIVO')
+                  .map(vehicle => (
+                    <option key={vehicle.id} value={vehicle.id}>
+                      {vehicle.brand} {vehicle.model} - {vehicle.plate_number}
+                    </option>
+                  ))}
+              </select>
+              <div className="form-buttons">
+                <button type="submit">{editingRoute ? 'Actualizar' : 'Crear'}</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowCreateRoute(false);
+                    setEditingRoute(null);
+                    setRouteFormData({
+                      name: '',
+                      start_point: '',
+                      end_point: '',
+                      intermediate_stops: [],
+                      departure_time: '',
+                      estimated_duration: 0,
+                      repetition_frequency: null,
+                      repetition_period: null,
+                      company_id: '',
+                      vehicle_id: null
+                    });
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Origen</th>
+                <th>Destino</th>
+                <th>Salida</th>
+                <th>Duración</th>
+                <th>Empresa</th>
+                <th>Vehículo</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {routes.map(route => (
+                <tr key={route.id}>
+                  <td>{route.name}</td>
+                  <td>{route.start_point}</td>
+                  <td>{route.end_point}</td>
+                  <td>{new Date(route.departure_time).toLocaleString()}</td>
+                  <td>{route.estimated_duration} min</td>
+                  <td>{companies.find(c => c.id === route.company_id)?.name || '-'}</td>
+                  <td>{vehicles.find(v => v.id === route.vehicle_id)?.plate_number || '-'}</td>
+                  <td>
+                    <select
+                      value={route.status}
+                      onChange={(e) => handleRouteStatusChange(route.id, e.target.value)}
+                      className={`status-select status-${route.status.toLowerCase()}`}
+                    >
+                      <option value="ACTIVA">Activa</option>
+                      <option value="EN_EJECUCION">En Ejecución</option>
+                      <option value="COMPLETADA">Completada</option>
+                      <option value="SUSPENDIDA">Suspendida</option>
+                    </select>
+                  </td>
+                  <td>
+                    <button 
+                      onClick={() => startEditingRoute(route)}
+                      className="edit-button"
+                    >
+                      Editar
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteRoute(route.id)}
                       className="delete-button"
                     >
                       Eliminar

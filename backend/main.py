@@ -1,14 +1,28 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Form, Request
 from sqlalchemy.orm import Session
 from db import get_db, Base, engine
-from models import User, UserRole, Company, Vehicle, VehicleStatus  # Add VehicleStatus here
+from models import (
+    User, 
+    UserRole, 
+    Company, 
+    Vehicle, 
+    VehicleStatus,
+    Route,           # Add these
+    RouteStatus,     # Add these
+    RouteExecution,
+    RepetitionPeriod
+)
 from schemas import (
     UserCreate, 
     UserResponse, 
     CompanyCreate, 
     CompanyResponse,
-    VehicleCreate,    # Add this
-    VehicleResponse   # Add this
+    VehicleCreate,
+    VehicleResponse,
+    RouteCreate,     # Add these
+    RouteResponse,   # Add these
+    RouteExecutionCreate,
+    RouteExecutionResponse
 )
 from typing import List
 from uuid import UUID
@@ -998,4 +1012,267 @@ async def delete_vehicle(
         raise HTTPException(
             status_code=500,
             detail=f"Error al eliminar el vehículo: {str(e)}"
+        )
+
+@app.post("/routes/", response_model=RouteResponse)
+async def create_route(
+    route: RouteCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        print(f"Creating route request from user: {current_user.email} (role: {current_user.role})")
+        print(f"Route data: {route.model_dump()}")
+
+        # Check permissions
+        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+            raise HTTPException(
+                status_code=403,
+                detail="Solo administradores y administrativos pueden crear rutas"
+            )
+
+        # Verify company ownership
+        company = db.query(Company).filter(
+            Company.id == route.company_id,
+            Company.admin_id == current_user.id
+        ).first()
+
+        if not company:
+            raise HTTPException(
+                status_code=403,
+                detail="No tiene permisos para crear rutas en esta empresa"
+            )
+
+        # If vehicle_id is provided, verify it exists and belongs to the company
+        if route.vehicle_id:
+            vehicle = db.query(Vehicle).filter(
+                Vehicle.id == route.vehicle_id,
+                Vehicle.company_id == route.company_id,
+                Vehicle.status == VehicleStatus.ACTIVO
+            ).first()
+            
+            if not vehicle:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Vehículo no encontrado, no pertenece a la empresa o no está activo"
+                )
+
+        # Create route
+        db_route = Route(**route.model_dump())
+        db.add(db_route)
+        db.commit()
+        db.refresh(db_route)
+
+        # If vehicle assigned, create route execution
+        if route.vehicle_id:
+            route_execution = RouteExecution(
+                route_id=db_route.id,
+                vehicle_id=route.vehicle_id,
+                status=RouteStatus.ACTIVA
+            )
+            db.add(route_execution)
+            db.commit()
+
+        return db_route
+
+    except Exception as e:
+        print(f"Error creating route: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al crear la ruta: {str(e)}"
+        )
+
+@app.get("/routes/", response_model=List[RouteResponse])
+async def get_routes(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Get companies administered by current user
+        companies = db.query(Company).filter(
+            Company.admin_id == current_user.id
+        ).all()
+        
+        company_ids = [company.id for company in companies]
+        
+        # Get routes for those companies
+        routes = db.query(Route).filter(
+            Route.company_id.in_(company_ids)
+        ).all()
+        
+        return routes
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener las rutas: {str(e)}"
+        )
+
+@app.get("/routes/{route_id}", response_model=RouteResponse)
+async def get_route(
+    route_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        route = db.query(Route).filter(
+            Route.id == route_id,
+            Route.company_id.in_(
+                db.query(Company.id).filter(Company.admin_id == current_user.id)
+            )
+        ).first()
+
+        if not route:
+            raise HTTPException(
+                status_code=404,
+                detail="Ruta no encontrada o no tiene permisos para verla"
+            )
+
+        return route
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener la ruta: {str(e)}"
+        )
+
+@app.put("/routes/{route_id}", response_model=RouteResponse)
+async def update_route(
+    route_id: UUID,
+    route_update: RouteCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Check permissions
+        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+            raise HTTPException(
+                status_code=403,
+                detail="Solo administradores y administrativos pueden modificar rutas"
+            )
+
+        # Get route and verify ownership
+        route = db.query(Route).filter(
+            Route.id == route_id,
+            Route.company_id.in_(
+                db.query(Company.id).filter(Company.admin_id == current_user.id)
+            )
+        ).first()
+
+        if not route:
+            raise HTTPException(
+                status_code=404,
+                detail="Ruta no encontrada o no tiene permisos para modificarla"
+            )
+
+        # Check if route can be updated
+        if route.status not in [RouteStatus.ACTIVA, RouteStatus.SUSPENDIDA]:
+            raise HTTPException(
+                status_code=400,
+                detail="Solo se pueden modificar rutas activas o suspendidas"
+            )
+
+        # Update route fields
+        for key, value in route_update.model_dump().items():
+            setattr(route, key, value)
+
+        db.commit()
+        db.refresh(route)
+        return route
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al actualizar la ruta: {str(e)}"
+        )
+
+@app.put("/routes/{route_id}/status", response_model=RouteResponse)
+async def update_route_status(
+    route_id: UUID,
+    status: RouteStatus,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Check permissions
+        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO, UserRole.OPERADOR]:
+            raise HTTPException(
+                status_code=403,
+                detail="No tiene permisos para cambiar el estado de las rutas"
+            )
+
+        # Get route and verify ownership
+        route = db.query(Route).filter(
+            Route.id == route_id,
+            Route.company_id.in_(
+                db.query(Company.id).filter(Company.admin_id == current_user.id)
+            )
+        ).first()
+
+        if not route:
+            raise HTTPException(
+                status_code=404,
+                detail="Ruta no encontrada o no tiene permisos para modificarla"
+            )
+
+        # Update status
+        route.status = status
+        db.commit()
+        db.refresh(route)
+        return route
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al actualizar el estado de la ruta: {str(e)}"
+        )
+
+@app.delete("/routes/{route_id}")
+async def delete_route(
+    route_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # Check permissions
+        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+            raise HTTPException(
+                status_code=403,
+                detail="Solo administradores y administrativos pueden eliminar rutas"
+            )
+
+        # Get route and verify ownership
+        route = db.query(Route).filter(
+            Route.id == route_id,
+            Route.company_id.in_(
+                db.query(Company.id).filter(Company.admin_id == current_user.id)
+            )
+        ).first()
+
+        if not route:
+            raise HTTPException(
+                status_code=404,
+                detail="Ruta no encontrada o no tiene permisos para eliminarla"
+            )
+
+        # Check if route can be deleted
+        if route.status not in [RouteStatus.ACTIVA, RouteStatus.SUSPENDIDA]:
+            raise HTTPException(
+                status_code=400,
+                detail="Solo se pueden eliminar rutas activas o suspendidas"
+            )
+
+        # Delete route
+        db.delete(route)
+        db.commit()
+        return {"message": "Ruta eliminada exitosamente"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al eliminar la ruta: {str(e)}"
         )
