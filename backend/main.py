@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Form, Request
+from fastapi import Body
 from sqlalchemy.orm import Session
 from db import get_db, Base, engine
 from models import (
@@ -26,6 +27,10 @@ from schemas import (
 )
 from typing import List
 from uuid import UUID
+import hmac
+import base64
+import hashlib
+from fastapi import Query
 from sqlalchemy import create_engine, text
 from auth import verify_admin, get_current_active_user, cognito_client
 from jose import jwt
@@ -37,6 +42,8 @@ from starlette.config import Config
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 import json
+from botocore.exceptions import ClientError
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
@@ -342,7 +349,7 @@ async def auth(request: Request):
             if not user:
                 # Si no se encuentra por cognito_sub, buscar por email
                 user = db.query(User).filter(User.email == email).first()
-                if user and not user.cognito_sub:
+                if user and not user.cognito_sub:  # Changed && to and
                     # Si existe el usuario pero no tiene cognito_sub, actualizarlo
                     user.cognito_sub = sub
                     db.commit()
@@ -1276,3 +1283,112 @@ async def delete_route(
             status_code=500,
             detail=f"Error al eliminar la ruta: {str(e)}"
         )
+
+def get_secret_hash(username: str) -> str:
+    """Calculate the secret hash for Cognito operations"""
+    message = username + os.getenv('COGNITO_APP_CLIENT_ID')
+    dig = hmac.new(
+        str(os.getenv('COGNITO_APP_CLIENT_SECRET')).encode('utf-8'),
+        msg=message.encode('utf-8'),
+        digestmod=hashlib.sha256
+    ).digest()
+    return base64.b64encode(dig).decode()
+
+@app.post("/forgot-password")
+async def forgot_password(
+    email: str = Query(..., description="Email address for password reset"),
+    db: Session = Depends(get_db)
+):
+    try:
+        # First verify user exists in our database
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="Usuario no encontrado"
+            )
+
+        # Calculate secret hash
+        secret_hash = get_secret_hash(email)
+
+        # Only use forgot_password since we want email delivery
+        cognito_client.forgot_password(
+            ClientId=os.getenv('COGNITO_APP_CLIENT_ID'),
+            Username=email,
+            SecretHash=secret_hash
+        )
+        
+        return {"message": "Se ha enviado un código de recuperación a su correo electrónico"}
+        
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code')
+        if error_code == 'UserNotFoundException':
+            raise HTTPException(
+                status_code=404,
+                detail="Usuario no encontrado"
+            )
+        elif error_code == 'LimitExceededException':
+            raise HTTPException(
+                status_code=429,
+                detail="Demasiados intentos. Por favor espere unos minutos"
+            )
+        else:
+            print(f"Cognito error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail="Error al procesar la solicitud"
+            )
+
+@app.post("/reset-password")
+async def reset_password(
+    email: str = Body(..., description="User email"),
+    code: str = Body(..., description="Verification code"),
+    new_password: str = Body(..., description="New password"),
+    db: Session = Depends(get_db)
+):
+    try:
+        # Verify user exists in our database
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="Usuario no encontrado"
+            )
+
+        # Calculate secret hash
+        secret_hash = get_secret_hash(email)
+
+        # Confirm password reset in Cognito
+        cognito_client.confirm_forgot_password(
+            ClientId=os.getenv('COGNITO_APP_CLIENT_ID'),
+            Username=email,
+            ConfirmationCode=code,
+            Password=new_password,
+            SecretHash=secret_hash
+        )
+        
+        return {"message": "Contraseña actualizada exitosamente"}
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        if error_code == 'CodeMismatchException':
+            raise HTTPException(
+                status_code=400,
+                detail="Código de verificación inválido"
+            )
+        elif error_code == 'ExpiredCodeException':
+            raise HTTPException(
+                status_code=400,
+                detail="El código ha expirado. Por favor solicite uno nuevo"
+            )
+        elif error_code == 'InvalidPasswordException':
+            raise HTTPException(
+                status_code=400,
+                detail="La contraseña no cumple con los requisitos de seguridad"
+            )
+        else:
+            print(f"Cognito error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail="Error al procesar la solicitud"
+            )

@@ -54,3 +54,33 @@ button:hover {
 .cognito-button:hover {
   background-color: #0052a3;
 }
+
+.reset-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.reset-form input {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.forgot-password-button {
+  margin-top: 1rem;
+  background-color: transparent;
+  color: #0066cc;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cancel-button {
+  background-color: #dc3545;
+}
+
+.cancel-button:hover {
+  background-color: #c82333;
+}
