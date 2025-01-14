@@ -63,6 +63,12 @@ const AdministrativosDashboard = () => {
   const [showRouteDetails, setShowRouteDetails] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState(null);
 
+  // Add this state for managing intermediate stops
+  const [stopFormData, setStopFormData] = useState({
+    location: '',
+    estimated_stop_time: 0
+  });
+
   // Fetch data for the administrative user's company
   const fetchData = useCallback(async () => {
     try {
@@ -354,6 +360,32 @@ const AdministrativosDashboard = () => {
       vehicle_id: route.vehicle_id
     });
     setShowCreateRoute(true);
+  };
+
+  // Add this function to handle adding stops
+  const addIntermediateStop = () => {
+    if (stopFormData.location && stopFormData.estimated_stop_time > 0) {
+      setRouteFormData({
+        ...routeFormData,
+        intermediate_stops: [
+          ...routeFormData.intermediate_stops,
+          {
+            location: stopFormData.location,
+            coordinates: null,
+            estimated_stop_time: parseInt(stopFormData.estimated_stop_time)
+          }
+        ]
+      });
+      setStopFormData({ location: '', estimated_stop_time: 0 });
+    }
+  };
+
+  // Add this function to remove stops
+  const removeIntermediateStop = (index) => {
+    setRouteFormData({
+      ...routeFormData,
+      intermediate_stops: routeFormData.intermediate_stops.filter((_, i) => i !== index)
+    });
   };
 
   const handleCreateUser = async (e) => {
@@ -962,6 +994,55 @@ const AdministrativosDashboard = () => {
                     </option>
                   ))}
               </select>
+
+              {/* Intermediate stops section */}
+              <div className="intermediate-stops-section">
+                <h3>Paradas Intermedias</h3>
+                <div className="add-stop-form">
+                  <input
+                    type="text"
+                    placeholder="Nombre de la parada"
+                    value={stopFormData.location}
+                    onChange={(e) => setStopFormData({
+                      ...stopFormData,
+                      location: e.target.value
+                    })}
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Tiempo estimado (min)"
+                    value={stopFormData.estimated_stop_time}
+                    onChange={(e) => setStopFormData({
+                      ...stopFormData,
+                      estimated_stop_time: parseInt(e.target.value) || 0
+                    })}
+                  />
+                  <button 
+                    type="button"
+                    onClick={addIntermediateStop}
+                    className="add-stop-button"
+                  >
+                    Agregar Parada
+                  </button>
+                </div>
+
+                {/* List of added stops */}
+                <div className="intermediate-stops-list">
+                  {routeFormData.intermediate_stops.map((stop, index) => (
+                    <div key={index} className="stop-item">
+                      <span>{stop.location} ({stop.estimated_stop_time} min)</span>
+                      <button 
+                        type="button"
+                        onClick={() => removeIntermediateStop(index)}
+                        className="remove-stop-button"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               <div className="form-buttons">
                 <button type="submit">{editingRoute ? 'Actualizar' : 'Crear'}</button>

@@ -61,18 +61,18 @@ class VehicleResponse(VehicleCreate):
 
 class IntermediateStop(BaseModel):
     location: str
-    coordinates: Optional[dict]
+    coordinates: Optional[dict] = None
     estimated_stop_time: int  # minutes
 
 class RouteCreate(BaseModel):
     name: str
     start_point: str
     end_point: str
-    intermediate_stops: Optional[List[IntermediateStop]] = None
+    intermediate_stops: List[IntermediateStop] = []
     departure_time: datetime
     estimated_duration: int
     repetition_frequency: Optional[int] = None
-    repetition_period: Optional[RepetitionPeriod] = None
+    repetition_period: Optional[str] = None
     company_id: UUID
     vehicle_id: Optional[UUID] = None  # Optional manual vehicle assignment
 

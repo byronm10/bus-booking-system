@@ -106,26 +106,20 @@ class Route(Base):
     __tablename__ = "routes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'), nullable=False)
-    vehicle_id = Column(UUID(as_uuid=True), ForeignKey('vehicles.id'), nullable=True)  # Add this line
-    
-    # Basic route info
     name = Column(String, nullable=False)
     start_point = Column(String, nullable=False)
     end_point = Column(String, nullable=False)
-    intermediate_stops = Column(JSONB, nullable=True)  # List of stops with coordinates and times
-    
-    # Schedule
-    departure_time = Column(DateTime(timezone=True), nullable=False)
-    estimated_duration = Column(Integer, nullable=False)  # Duration in minutes
-    repetition_frequency = Column(Integer, nullable=True)  # Number of repetitions
-    repetition_period = Column(ENUM(RepetitionPeriod, name='repetition_period', create_type=False), nullable=True)
-    
-    # Status and tracking
-    status = Column(ENUM(RouteStatus, name='route_status', create_type=False), default=RouteStatus.ACTIVA)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
+    intermediate_stops = Column(JSONB, nullable=True, default=[])
+    departure_time = Column(DateTime, nullable=False)
+    estimated_duration = Column(Integer, nullable=False)  # en minutos
+    repetition_frequency = Column(Integer, nullable=True)
+    repetition_period = Column(Enum(RepetitionPeriod, name='repetition_period', create_type=False), nullable=True)
+    status = Column(Enum(RouteStatus, name='route_status', create_type=False), default=RouteStatus.ACTIVA)
+    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'), nullable=False)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey('vehicles.id'), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())  # Add this
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())  # Add this
+
     # Relationships
     company = relationship("Company", back_populates="routes")
     executions = relationship("RouteExecution", back_populates="route", cascade="all, delete-orphan")

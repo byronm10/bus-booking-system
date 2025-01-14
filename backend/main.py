@@ -1168,15 +1168,29 @@ async def create_route(
                 Vehicle.company_id == route.company_id,
                 Vehicle.status == VehicleStatus.ACTIVO
             ).first()
-            
             if not vehicle:
                 raise HTTPException(
                     status_code=400,
                     detail="Vehículo no encontrado, no pertenece a la empresa o no está activo"
                 )
 
+        # Validate intermediate stops
+        if route.intermediate_stops:
+            total_stop_time = sum(stop.estimated_stop_time for stop in route.intermediate_stops)
+            if total_stop_time >= route.estimated_duration:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El tiempo total de paradas no puede ser mayor o igual a la duración estimada de la ruta"
+                )
+
         # Create route
-        db_route = Route(**route.model_dump())
+        route_data = route.model_dump()
+        
+        # Convert intermediate stops to JSON format
+        if route.intermediate_stops:
+            route_data['intermediate_stops'] = [stop.model_dump() for stop in route.intermediate_stops]
+        
+        db_route = Route(**route_data)
         db.add(db_route)
         db.commit()
         db.refresh(db_route)
@@ -1254,7 +1268,6 @@ async def get_route(
             status_code=500,
             detail=f"Error al obtener la ruta: {str(e)}"
         )
-
 @app.put("/routes/{route_id}", response_model=RouteResponse)
 async def update_route(
     route_id: UUID,
@@ -1298,8 +1311,6 @@ async def update_route(
                 detail="Ruta no encontrada o no tiene permisos para modificarla"
             )
 
-        # Rest of validation and update logic...
-
         # Check if route can be updated
         if route.status not in [RouteStatus.ACTIVA, RouteStatus.SUSPENDIDA]:
             raise HTTPException(
@@ -1307,8 +1318,22 @@ async def update_route(
                 detail="Solo se pueden modificar rutas activas o suspendidas"
             )
 
+        # Validate intermediate stops
+        if route_update.intermediate_stops:
+            total_stop_time = sum(stop.estimated_stop_time for stop in route_update.intermediate_stops)
+            if total_stop_time >= route_update.estimated_duration:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El tiempo total de paradas no puede ser mayor o igual a la duración estimada de la ruta"
+                )
+
+        # Prepare update data with intermediate stops conversion
+        update_data = route_update.model_dump()
+        if route_update.intermediate_stops:
+            update_data['intermediate_stops'] = [stop.model_dump() for stop in route_update.intermediate_stops]
+
         # Update route fields
-        for key, value in route_update.model_dump().items():
+        for key, value in update_data.items():
             setattr(route, key, value)
 
         db.commit()
@@ -1316,12 +1341,12 @@ async def update_route(
         return route
 
     except Exception as e:
+        print(f"Error updating route: {str(e)}")
         db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Error al actualizar la ruta: {str(e)}"
         )
-
 @app.put("/routes/{route_id}/status", response_model=RouteResponse)
 async def update_route_status(
     route_id: UUID,

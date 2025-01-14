@@ -293,3 +293,81 @@
 .duration-field input {
   width: 80px;
 }
+
+.intermediate-stops-section {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+}
+
+.add-stop-form {
+  display: grid;
+  grid-template-columns: 1fr 120px 100px;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  align-items: start;
+}
+
+.add-stop-form input {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.add-stop-button {
+  padding: 8px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  height: 100%;
+}
+
+.add-stop-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+
+.intermediate-stops-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.5rem;
+  margin-top: 1rem;
+}
+
+.stop-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.stop-item:last-child {
+  margin-bottom: 0;
+}
+
+.stop-item strong {
+  color: #007bff;
+  margin-right: 0.5rem;
+}
+
+.stop-detail {
+  padding: 4px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.stop-detail:last-child {
+  border-bottom: none;
+}
+
+.detail-value .stop-detail {
+  margin-left: 1rem;
+  color: #666;
+}
