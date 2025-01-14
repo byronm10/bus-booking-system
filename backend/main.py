@@ -44,6 +44,7 @@ from starlette.responses import RedirectResponse
 import json
 from botocore.exceptions import ClientError
 from fastapi.responses import JSONResponse
+import router
 
 app = FastAPI()
 
