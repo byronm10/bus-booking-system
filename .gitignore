@@ -1,5 +1,37 @@
+# General
 *.env
-packages-lock.json
-package.json
-__pycache__
+.DS_Store
+
+# Node.js
+node_modules/
+node_modules/*
+node_modules
+package-lock.json
+yarn.lock
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.sqlite3
+*.log
+.Python
+
+# FastAPI Backend
+backend/__pycache__/
 backend/backend/
+
+# React Frontend
+build/
+dist/
+*.cache/
+coverage/
+.vscode/
+
+# Editor-specific
+.idea/
+*.swp
+*.swo
+*.vscode/
