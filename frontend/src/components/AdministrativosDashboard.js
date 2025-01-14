@@ -2,6 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+const formatLocalDateTime = (utcDateTime) => {
+  if (!utcDateTime) return '';
+  // Split the ISO string and keep exact time
+  const [datePart, timePart] = utcDateTime.split('T');
+  const timeWithoutZ = timePart?.split('.')[0] || '00:00';
+  return `${datePart} ${timeWithoutZ}`;
+};
+
 const AdministrativosDashboard = () => {
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -1001,7 +1009,7 @@ const AdministrativosDashboard = () => {
                   <td>{route.name}</td>
                   <td>{route.start_point}</td>
                   <td>{route.end_point}</td>
-                  <td>{new Date(route.departure_time).toLocaleString()}</td>
+                  <td>{formatLocalDateTime(route.departure_time)}</td>
                   <td>{route.estimated_duration} min</td>
                   <td>{vehicles.find(v => v.id === route.vehicle_id)?.plate_number || '-'}</td>
                   <td>
@@ -1074,7 +1082,7 @@ const AdministrativosDashboard = () => {
                   <div className="detail-row">
                     <span className="detail-label">Salida:</span>
                     <span className="detail-value">
-                      {new Date(selectedRoute.departure_time).toLocaleString()}
+                      {formatLocalDateTime(selectedRoute.departure_time)}
                     </span>
                   </div>
                   <div className="detail-row">

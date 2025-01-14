@@ -2,6 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+const formatLocalDateTime = (utcDateTime) => {
+  if (!utcDateTime) return '';
+  // Create a date object from the UTC string
+  const date = new Date(utcDateTime);
+  
+  // Get UTC components
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  
+  // Format as YYYY-MM-DD HH:mm
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+};
+
 const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -810,20 +826,6 @@ const AdminDashboard = () => {
                     <span className="detail-label">Teléfono:</span>
                     <span className="detail-value">{selectedCompany.phone}</span>
                   </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Dirección:</span>
-                    <span className="detail-value">{selectedCompany.address}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Estado:</span>
-                    <span className="detail-value">{selectedCompany.status}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Creado:</span>
-                    <span className="detail-value">
-                      {new Date(selectedCompany.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
                 </div>
                 <button 
                   className="close-button"
@@ -1268,9 +1270,9 @@ const AdminDashboard = () => {
                 />
                 <input
                   type="time"
-                  value={routeFormData.departure_time.split('T')[1] || ''}
+                  value={routeFormData.departure_time.split('T')[1]?.split('.')[0] || ''}
                   onChange={(e) => {
-                    const date = routeFormData.departure_time.split('T')[0];
+                    const date = routeFormData.departure_time.split('T')[0] || new Date().toISOString().split('T')[0];
                     setRouteFormData({
                       ...routeFormData,
                       departure_time: `${date}T${e.target.value}`
@@ -1417,7 +1419,7 @@ const AdminDashboard = () => {
                   <td>{route.name}</td>
                   <td>{route.start_point}</td>
                   <td>{route.end_point}</td>
-                  <td>{new Date(route.departure_time).toLocaleString()}</td>
+                  <td>{formatLocalDateTime(route.departure_time)}</td>
                   <td>{route.estimated_duration} min</td>
                   <td>{companies.find(c => c.id === route.company_id)?.name || '-'}</td>
                   <td>{vehicles.find(v => v.id === route.vehicle_id)?.plate_number || '-'}</td>
@@ -1490,7 +1492,7 @@ const AdminDashboard = () => {
                   <div className="detail-row">
                     <span className="detail-label">Salida:</span>
                     <span className="detail-value">
-                      {new Date(selectedRoute.departure_time).toLocaleString()}
+                      {formatLocalDateTime(selectedRoute.departure_time)}
                     </span>
                   </div>
                   <div className="detail-row">
