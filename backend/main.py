@@ -131,31 +131,6 @@ if __name__ == "__main__":
 
 
 
-
-
-
-# Re-insert admin user if needed
-@app.on_event("startup")
-async def startup_event():
-    db = next(get_db())
-    try:
-        # Check if admin exists
-        admin = db.query(User).filter(User.email == "admin@busfleet.com").first()
-        if not admin:
-            admin = User(
-                email="admin@busfleet.com",
-                name="Admin User",
-                role=UserRole.ADMIN,
-                status="active"
-            )
-            db.add(admin)
-            db.commit()
-    except Exception as e:
-        print(f"Error creating admin user: {str(e)}")
-        db.rollback()
-    finally:
-        db.close()
-
 @app.post("/users/", response_model=UserResponse)
 async def create_user(
     user: UserCreate,

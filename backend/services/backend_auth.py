@@ -5,8 +5,11 @@ from sqlalchemy.orm import Session
 import boto3
 import os
 import requests
-from models import User, UserRole
-from db import get_db
+
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from backend.services.sdk import get_db, Base, engine
+from api.schemas.backend_models import User, UserRole
 
 cognito_client = boto3.client('cognito-idp',
     aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
@@ -26,7 +29,7 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
     tokenUrl=f"https://{os.getenv('COGNITO_DOMAIN')}.auth.{COGNITO_REGION}.amazoncognito.com/oauth2/token"
 )
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
