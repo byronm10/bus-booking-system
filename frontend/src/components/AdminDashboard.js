@@ -73,7 +73,7 @@ const AdminDashboard = () => {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/users/', {
+      const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/users/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -91,7 +91,7 @@ const AdminDashboard = () => {
   const fetchCompanies = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/companies/', {
+      const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/companies/`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -105,7 +105,7 @@ const AdminDashboard = () => {
   const fetchCompanyDetails = async (companyId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:8000/companies/${companyId}`, {
+      const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/companies/${companyId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -120,7 +120,7 @@ const AdminDashboard = () => {
   const fetchCurrentUser = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/users/me', {
+      const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/users/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -174,7 +174,7 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8000/companies/', formData, {
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/companies/`, formData, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -191,7 +191,7 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:8000/companies/${editingCompany.id}`, formData, {
+      await axios.put(`${process.env.REACT_APP_BACKEND_URL}/companies/${editingCompany.id}`, formData, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -209,7 +209,7 @@ const AdminDashboard = () => {
     if (window.confirm('¿Está seguro de eliminar esta empresa? Esta acción no se puede deshacer.')) {
       try {
         const token = localStorage.getItem('token');
-        await axios.delete(`http://localhost:8000/companies/${companyId}`, {
+        await axios.delete(`${process.env.REACT_APP_BACKEND_URL}/companies/${companyId}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -236,7 +236,7 @@ const AdminDashboard = () => {
   const handleSignOut = async () => {
     try {
       // Call backend logout endpoint first
-      const response = await axios.post('http://localhost:8000/logout', {});
+      const response = await axios.post(`${process.env.REACT_APP_BACKEND_URL}/logout`, {});
 
       // Clear all storage
       localStorage.clear();
@@ -271,7 +271,7 @@ const AdminDashboard = () => {
     }
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.put('http://localhost:8000/users/profile', 
+      const response = await axios.put(`${process.env.REACT_APP_BACKEND_URL}/users/profile`, 
         {
           name: profileData.name,
           email: profileData.email,
@@ -316,7 +316,7 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8000/users/', userFormData, {
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/users/`, userFormData, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -345,7 +345,7 @@ const AdminDashboard = () => {
     if (window.confirm('¿Está seguro de eliminar este usuario? Esta acción no se puede deshacer.')) {
       try {
         const token = localStorage.getItem('token');
-        await axios.delete(`http://localhost:8000/users/${userId}`, {
+        await axios.delete(`${process.env.REACT_APP_BACKEND_URL}/users/${userId}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -362,7 +362,7 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:8000/users/${editingUser.id}`, userFormData, {
+      await axios.put(`${process.env.REACT_APP_BACKEND_URL}/users/${editingUser.id}`, userFormData, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

@@ -63,7 +63,7 @@ const Login = () => {
     // Clear any existing tokens before login
     localStorage.clear();
     sessionStorage.clear();
-    window.location.href = 'http://localhost:8000/login';
+    window.location.href = `${process.env.REACT_APP_BACKEND_URL}/login`;
   };
 
   const handleForgotPassword = async (e) => {

@@ -23,7 +23,7 @@ const ProtectedRoute = ({ children }) => {
         }
 
         // Verify token by making a request to /users/
-        const response = await axios.get('http://localhost:8000/users/', {
+        const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/users/`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

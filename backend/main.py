@@ -53,7 +53,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.urandom(24))
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[os.getenv('FRONTEND_URL')],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,7 +70,7 @@ oauth.register(
     client_secret=os.getenv('COGNITO_APP_CLIENT_SECRET'),
     client_kwargs={
         'scope': 'email openid phone aws.cognito.signin.user.admin',
-        'redirect_uri': 'http://localhost:8000/auth'
+        'redirect_uri': f"{os.getenv('SELF_BACKEND_URL')}/auth"
     }
 )
 
@@ -360,10 +360,8 @@ async def auth(request: Request):
                         detail="Usuario no encontrado en el sistema"
                     )
             
-            # Redirect to frontend with access token
-            frontend_url = "http://localhost:3000"
             response = RedirectResponse(
-                url=f"{frontend_url}?token={token['access_token']}"
+                url=f"{os.getenv('FRONTEND_URL')}?token={token['access_token']}"
             )
             return response
             
@@ -385,14 +383,14 @@ async def logout(request: Request):
         logout_url = (
             f"{cognito_domain}/logout?"
             f"client_id={os.getenv('COGNITO_APP_CLIENT_ID')}&"
-            f"logout_uri=http://localhost:3000"  # Changed from client_id to actual URL
+            f"logout_uri={os.getenv('FRONTEND_URL')}"
         )
         
         return {"logoutUrl": logout_url}
         
     except Exception as e:
         print(f"Logout error: {str(e)}")
-        return {"logoutUrl": "http://localhost:3000"}
+        return {"logoutUrl": os.getenv('FRONTEND_URL')}
 
 @app.post("/companies/", response_model=CompanyResponse)
 async def create_company(
