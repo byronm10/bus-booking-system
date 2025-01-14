@@ -631,33 +631,74 @@ async def update_user(
     current_user: User = Depends(get_current_active_user)
 ):
     try:
+        print(f"Updating user request from user: {current_user.email} (role: {current_user.role})")
+        print(f"User ID: {user_id}")
+        print(f"Update data: {user_update.model_dump()}")
+
         # Get existing user
         db_user = db.query(User).filter(User.id == user_id).first()
         if not db_user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-        # Verify admin has access to this user's company
-        company = db.query(Company).filter(
-            Company.id == db_user.company_id,
-            Company.admin_id == current_user.id
-        ).first()
-        
+        # Check permissions and verify company access based on role
+        if current_user.role == UserRole.ADMIN:
+            # Admin must own the company
+            company = db.query(Company).filter(
+                Company.id == db_user.company_id,
+                Company.admin_id == current_user.id
+            ).first()
+        else:
+            # ADMINISTRATIVO must belong to the same company
+            if current_user.role != UserRole.ADMINISTRATIVO:
+                raise HTTPException(
+                    status_code=403,
+                    detail="No tiene permisos para modificar usuarios"
+                )
+            
+            # Check if user belongs to same company as ADMINISTRATIVO
+            company = db.query(Company).filter(
+                Company.id == db_user.company_id,
+                Company.id == current_user.company_id
+            ).first()
+
+            # ADMINISTRATIVO can't modify ADMIN or other ADMINISTRATIVO users
+            if db_user.role in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+                raise HTTPException(
+                    status_code=403,
+                    detail="No tiene permisos para modificar usuarios administrativos o administradores"
+                )
+
+            # ADMINISTRATIVO can't change role to ADMIN or ADMINISTRATIVO
+            if user_update.role in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+                raise HTTPException(
+                    status_code=403,
+                    detail="No puede asignar roles administrativos o de administrador"
+                )
+
         if not company:
             raise HTTPException(
                 status_code=403,
                 detail="No tiene permisos para modificar este usuario"
             )
 
-        # Update Cognito user
-        cognito_client.admin_update_user_attributes(
-            UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
-            Username=db_user.email,
-            UserAttributes=[
-                {'Name': 'email', 'Value': user_update.email},
-                {'Name': 'name', 'Value': user_update.name},
-                {'Name': 'custom:role', 'Value': user_update.role}  # Update role in Cognito
-            ]
-        )
+        # Update Cognito user attributes
+        try:
+            cognito_client.admin_update_user_attributes(
+                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                Username=db_user.email,
+                UserAttributes=[
+                    {'Name': 'email', 'Value': user_update.email},
+                    {'Name': 'email_verified', 'Value': 'true'},
+                    {'Name': 'name', 'Value': user_update.name},
+                    {'Name': 'custom:role', 'Value': user_update.role}
+                ]
+            )
+        except Exception as e:
+            print(f"Error updating Cognito user: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error updating Cognito user: {str(e)}"
+            )
 
         # Update database user
         for key, value in user_update.model_dump().items():
@@ -667,9 +708,15 @@ async def update_user(
         db.refresh(db_user)
         return db_user
 
+    except HTTPException as http_error:
+        raise http_error
     except Exception as e:
+        print(f"Error updating user: {str(e)}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al actualizar el usuario: {str(e)}"
+        )
 
 @app.delete("/users/{user_id}")
 async def delete_user(
@@ -933,7 +980,6 @@ async def update_vehicle_status(
             status_code=500,
             detail=f"Error al actualizar el estado del vehículo: {str(e)}"
         )
-
 @app.put("/vehicles/{vehicle_id}", response_model=VehicleResponse)
 async def update_vehicle(
     vehicle_id: UUID,
@@ -946,6 +992,10 @@ async def update_vehicle(
         print(f"Update data: {vehicle_update.model_dump()}")
         print(f"Request from user: {current_user.email} (role: {current_user.role})")
 
+        # Convert empty string VIN to None
+        if not vehicle_update.vin:
+            vehicle_update.vin = None
+
         # Check permissions
         if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
             print(f"Permission denied for user {current_user.email}")
@@ -956,7 +1006,6 @@ async def update_vehicle(
 
         # Get vehicle and verify ownership based on role
         if current_user.role == UserRole.ADMIN:
-            # Admin must own the company
             vehicle = db.query(Vehicle).filter(
                 Vehicle.id == vehicle_id,
                 Vehicle.company_id.in_(
@@ -964,7 +1013,6 @@ async def update_vehicle(
                 )
             ).first()
         else:
-            # ADMINISTRATIVO must belong to that company
             vehicle = db.query(Vehicle).filter(
                 Vehicle.id == vehicle_id,
                 Vehicle.company_id == current_user.company_id
@@ -1002,6 +1050,18 @@ async def update_vehicle(
                     detail="Ya existe un vehículo con este número en la empresa"
                 )
 
+        # Check for duplicate VIN if changed and not None
+        if vehicle_update.vin and vehicle_update.vin != vehicle.vin:
+            existing_vin = db.query(Vehicle).filter(
+                Vehicle.vin == vehicle_update.vin,
+                Vehicle.id != vehicle_id
+            ).first()
+            if existing_vin:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ya existe un vehículo con este VIN"
+                )
+
         # Update vehicle fields
         for key, value in vehicle_update.model_dump().items():
             setattr(vehicle, key, value)
@@ -1011,6 +1071,8 @@ async def update_vehicle(
         print(f"Vehicle updated successfully")
         return vehicle
 
+    except HTTPException as http_error:
+        raise http_error
     except Exception as e:
         print(f"Error updating vehicle: {str(e)}")
         db.rollback()
