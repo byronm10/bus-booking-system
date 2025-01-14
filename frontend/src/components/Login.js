@@ -34,7 +34,27 @@ const Login = () => {
     
     if (token) {
       localStorage.setItem('token', token);
-      navigate('/dashboard', { replace: true });
+      // Check user role and redirect accordingly
+      const checkUserRole = async () => {
+        try {
+          const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/users/me`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.data.role === 'ADMINISTRATIVO') {
+            navigate('/dashboard-administrativo', { replace: true });
+          } else if (response.data.role === 'ADMIN') {
+            navigate('/dashboard', { replace: true });
+          }
+        } catch (err) {
+          console.error('Error checking user role:', err);
+          navigate('/', { replace: true });
+        }
+      };
+      
+      checkUserRole();
     }
   }, [location, navigate]);
 

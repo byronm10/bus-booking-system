@@ -64,6 +64,10 @@ const AdminDashboard = () => {
     vehicle_id: null
   });
   const [editingRoute, setEditingRoute] = useState(null);
+  const [showVehicleDetails, setShowVehicleDetails] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [showRouteDetails, setShowRouteDetails] = useState(false);
+  const [selectedRoute, setSelectedRoute] = useState(null);
   const navigate = useNavigate();
 
   const fetchUsers = async () => {
@@ -599,6 +603,16 @@ const AdminDashboard = () => {
     setShowUserDetails(true);
   };
 
+  const showVehicleDetailsModal = (vehicle) => {
+    setSelectedVehicle(vehicle);
+    setShowVehicleDetails(true);
+  };
+
+  const showRouteDetailsModal = (route) => {
+    setSelectedRoute(route);
+    setShowRouteDetails(true);
+  };
+
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
@@ -1125,6 +1139,12 @@ const AdminDashboard = () => {
                   </td>
                   <td>
                     <button 
+                      onClick={() => showVehicleDetailsModal(vehicle)}
+                      className="details-button"
+                    >
+                      Ver Detalles
+                    </button>
+                    <button 
                       onClick={() => startEditingVehicle(vehicle)}
                       className="edit-button"
                     >
@@ -1141,6 +1161,63 @@ const AdminDashboard = () => {
               ))}
             </tbody>
           </table>
+
+          {showVehicleDetails && selectedVehicle && (
+            <div className="modal-overlay">
+              <div className="modal-content">
+                <h2>Detalles del Vehículo</h2>
+                <div className="vehicle-details">
+                  <div className="detail-row">
+                    <span className="detail-label">Marca:</span>
+                    <span className="detail-value">{selectedVehicle.brand}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Modelo:</span>
+                    <span className="detail-value">{selectedVehicle.model}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Año:</span>
+                    <span className="detail-value">{selectedVehicle.year}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Tipo:</span>
+                    <span className="detail-value">{selectedVehicle.vehicle_type}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Placa:</span>
+                    <span className="detail-value">{selectedVehicle.plate_number}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Número:</span>
+                    <span className="detail-value">{selectedVehicle.company_number}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">VIN:</span>
+                    <span className="detail-value">{selectedVehicle.vin || 'No asignado'}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Empresa:</span>
+                    <span className="detail-value">
+                      {companies.find(c => c.id === selectedVehicle.company_id)?.name || '-'}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Estado:</span>
+                    <span className="detail-value">{selectedVehicle.status}</span>
+                  </div>
+                </div>
+                <button 
+                  className="close-button"
+                  onClick={() => {
+                    setShowVehicleDetails(false);
+                    setSelectedVehicle(null);
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="routes-section">
@@ -1358,6 +1435,12 @@ const AdminDashboard = () => {
                   </td>
                   <td>
                     <button 
+                      onClick={() => showRouteDetailsModal(route)}
+                      className="details-button"
+                    >
+                      Ver Detalles
+                    </button>
+                    <button 
                       onClick={() => startEditingRoute(route)}
                       className="edit-button"
                     >
@@ -1374,6 +1457,75 @@ const AdminDashboard = () => {
               ))}
             </tbody>
           </table>
+
+          {showRouteDetails && selectedRoute && (
+            <div className="modal-overlay">
+              <div className="modal-content">
+                <h2>Detalles de la Ruta</h2>
+                <div className="route-details">
+                  <div className="detail-row">
+                    <span className="detail-label">Nombre:</span>
+                    <span className="detail-value">{selectedRoute.name}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Origen:</span>
+                    <span className="detail-value">{selectedRoute.start_point}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Destino:</span>
+                    <span className="detail-value">{selectedRoute.end_point}</span>
+                  </div>
+                  {selectedRoute.intermediate_stops?.length > 0 && (
+                    <div className="detail-row">
+                      <span className="detail-label">Paradas:</span>
+                      <div className="detail-value">
+                        {selectedRoute.intermediate_stops.map((stop, index) => (
+                          <div key={index} className="stop-detail">
+                            {index + 1}. {stop.location} ({stop.estimated_stop_time} min)
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="detail-row">
+                    <span className="detail-label">Salida:</span>
+                    <span className="detail-value">
+                      {new Date(selectedRoute.departure_time).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Duración:</span>
+                    <span className="detail-value">{selectedRoute.estimated_duration} min</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Empresa:</span>
+                    <span className="detail-value">
+                      {companies.find(c => c.id === selectedRoute.company_id)?.name || '-'}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Vehículo:</span>
+                    <span className="detail-value">
+                      {vehicles.find(v => v.id === selectedRoute.vehicle_id)?.plate_number || 'No asignado'}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Estado:</span>
+                    <span className="detail-value">{selectedRoute.status}</span>
+                  </div>
+                </div>
+                <button 
+                  className="close-button"
+                  onClick={() => {
+                    setShowRouteDetails(false);
+                    setSelectedRoute(null);
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          )}
         </section>
       </div>
     </div>

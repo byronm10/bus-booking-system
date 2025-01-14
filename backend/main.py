@@ -132,31 +132,42 @@ async def create_user(
 ):
     try:
         print(f"Creating user with data: {user.model_dump()}")
-        print(f"Current admin: {current_user.email}")
+        print(f"Current user: {current_user.email} (role: {current_user.role})")
 
-        # Verify current user is ADMIN
-        if current_user.role != UserRole.ADMIN:
-            print(f"User {current_user.email} is not admin")
+        # Allow both ADMIN and ADMINISTRATIVO to create users
+        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
             raise HTTPException(
                 status_code=403,
-                detail="Solo los administradores pueden crear usuarios"
+                detail="No tiene permisos para crear usuarios"
             )
 
-        # Get company
-        company = db.query(Company).filter(
-            Company.id == user.company_id,
-            Company.admin_id == current_user.id
-        ).first()
+        # ADMINISTRATIVO can't create ADMIN or other ADMINISTRATIVO users
+        if current_user.role == UserRole.ADMINISTRATIVO and user.role in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+            raise HTTPException(
+                status_code=403,
+                detail="No tiene permisos para crear usuarios administrativos o administradores"
+            )
+
+        # Get company based on current user's role
+        if current_user.role == UserRole.ADMIN:
+            company = db.query(Company).filter(
+                Company.id == user.company_id,
+                Company.admin_id == current_user.id
+            ).first()
+        else:  # ADMINISTRATIVO
+            company = db.query(Company).filter(
+                Company.id == current_user.company_id
+            ).first()
         
         if not company:
-            print(f"Company {user.company_id} not found or not owned by {current_user.email}")
+            print(f"Company not found or access denied")
             raise HTTPException(
                 status_code=403,
                 detail="No tiene permisos para crear usuarios en esta empresa"
             )
 
-        print(f"Creating user in Cognito pool: {os.getenv('COGNITO_USER_POOL_ID')}")
-        # Create user in Cognito with email notification enabled
+        # Create user in Cognito
+        print(f"Creating user in Cognito pool")
         try:
             cognito_response = cognito_client.admin_create_user(
                 UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
@@ -167,9 +178,8 @@ async def create_user(
                     {'Name': 'name', 'Value': user.name},
                     {'Name': 'custom:role', 'Value': user.role}
                 ],
-                # Remove MessageAction='SUPPRESS' to enable email sending
-                TemporaryPassword='Temp@' + os.urandom(4).hex(),  # Generate random password
-                DesiredDeliveryMediums=['EMAIL']  # Specify email delivery
+                TemporaryPassword='Temp@' + os.urandom(4).hex(),
+                DesiredDeliveryMediums=['EMAIL']
             )
             print(f"Cognito user created: {cognito_response['User']['Username']}")
         except Exception as e:
@@ -205,7 +215,6 @@ async def create_user(
                 **user.model_dump(),
                 cognito_sub=cognito_response['User']['Username']
             )
-            print(f"Creating user in database: {db_user.email}")
             db.add(db_user)
             db.commit()
             db.refresh(db_user)
@@ -226,17 +235,8 @@ async def create_user(
     except Exception as e:
         print(f"General error in create_user: {str(e)}")
         db.rollback()
-        # Try to clean up Cognito user if created
-        try:
-            if 'cognito_response' in locals():
-                cognito_client.admin_delete_user(
-                    UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
-                    Username=user.email
-                )
-        except Exception as cleanup_error:
-            print(f"Error cleaning up Cognito user: {str(cleanup_error)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Error creating user: {str(e)}"
         )
 
@@ -478,18 +478,38 @@ async def get_company_details(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    company = db.query(Company).filter(
-        Company.id == company_id,
-        Company.admin_id == current_user.id  # Solo acceso a sus propias empresas
-    ).first()
-    
-    if not company:
-        raise HTTPException(
-            status_code=404, 
-            detail="Empresa no encontrada o no tiene permisos para verla"
-        )
+    try:
+        print(f"Fetching company details - Company ID: {company_id}")
+        print(f"Request from user: {current_user.email} (role: {current_user.role})")
         
-    return company
+        # For ADMINISTRATIVO, directly get their company
+        if current_user.role == UserRole.ADMINISTRATIVO:
+            company = db.query(Company).filter(Company.id == current_user.company_id).first()
+            print(f"ADMINISTRATIVO user, fetching their company: {company.id if company else 'Not found'}")
+        else:
+            # For ADMIN, check company ownership
+            company = db.query(Company).filter(
+                Company.id == company_id,
+                Company.admin_id == current_user.id
+            ).first()
+            print(f"ADMIN user, fetching owned company: {company.id if company else 'Not found'}")
+        
+        if not company:
+            print(f"Company not found or access denied for ID: {company_id}")
+            raise HTTPException(
+                status_code=404, 
+                detail="Empresa no encontrada o no tiene permisos para verla"
+            )
+            
+        print(f"Company found: {company.name}")
+        return company
+        
+    except Exception as e:
+        print(f"Error in get_company_details: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener detalles de la empresa: {str(e)}"
+        )
 
 @app.put("/companies/{company_id}", response_model=CompanyResponse)
 async def update_company(
@@ -721,15 +741,23 @@ async def create_vehicle(
                 detail="Solo administradores y administrativos pueden crear vehículos"
             )
 
-        # Get company and verify ownership
-        company = db.query(Company).filter(
-            Company.id == vehicle.company_id,
-            Company.admin_id == current_user.id
-        ).first()
-        
-        print(f"Checking company access - Company ID: {vehicle.company_id}, Admin ID: {current_user.id}")
+        # Get company and verify access based on role
+        if current_user.role == UserRole.ADMIN:
+            # Admin must own the company
+            company = db.query(Company).filter(
+                Company.id == vehicle.company_id,
+                Company.admin_id == current_user.id
+            ).first()
+        else:
+            # ADMINISTRATIVO must belong to the company
+            company = db.query(Company).filter(
+                Company.id == vehicle.company_id,
+                Company.id == current_user.company_id
+            ).first()
+
+        print(f"Checking company access - Company ID: {vehicle.company_id}")
         if not company:
-            print(f"Company access denied: Company {vehicle.company_id} not found or not owned by {current_user.email}")
+            print(f"Company access denied for user {current_user.email}")
             raise HTTPException(
                 status_code=403,
                 detail="No tiene permisos para añadir vehículos a esta empresa"
@@ -864,13 +892,19 @@ async def update_vehicle_status(
                 detail="No tiene permisos para actualizar el estado del vehículo"
             )
 
-        # Get vehicle and verify ownership
-        vehicle = db.query(Vehicle).filter(
-            Vehicle.id == vehicle_id,
-            Vehicle.company_id.in_(
-                db.query(Company.id).filter(Company.admin_id == current_user.id)
-            )
-        ).first()
+        # Get vehicle and verify ownership based on role
+        if current_user.role == UserRole.ADMIN:
+            vehicle = db.query(Vehicle).filter(
+                Vehicle.id == vehicle_id,
+                Vehicle.company_id.in_(
+                    db.query(Company.id).filter(Company.admin_id == current_user.id)
+                )
+            ).first()
+        else:
+            vehicle = db.query(Vehicle).filter(
+                Vehicle.id == vehicle_id,
+                Vehicle.company_id == current_user.company_id
+            ).first()
 
         if not vehicle:
             print(f"Vehicle {vehicle_id} not found or access denied")
@@ -920,15 +954,24 @@ async def update_vehicle(
                 detail="Solo administradores y administrativos pueden modificar vehículos"
             )
 
-        # Get vehicle and verify ownership
-        vehicle = db.query(Vehicle).filter(
-            Vehicle.id == vehicle_id,
-            Vehicle.company_id.in_(
-                db.query(Company.id).filter(Company.admin_id == current_user.id)
-            )
-        ).first()
+        # Get vehicle and verify ownership based on role
+        if current_user.role == UserRole.ADMIN:
+            # Admin must own the company
+            vehicle = db.query(Vehicle).filter(
+                Vehicle.id == vehicle_id,
+                Vehicle.company_id.in_(
+                    db.query(Company.id).filter(Company.admin_id == current_user.id)
+                )
+            ).first()
+        else:
+            # ADMINISTRATIVO must belong to that company
+            vehicle = db.query(Vehicle).filter(
+                Vehicle.id == vehicle_id,
+                Vehicle.company_id == current_user.company_id
+            ).first()
 
         if not vehicle:
+            print(f"Vehicle {vehicle_id} not found or access denied")
             raise HTTPException(
                 status_code=404,
                 detail="Vehículo no encontrado o no tiene permisos para modificarlo"
@@ -1038,11 +1081,19 @@ async def create_route(
                 detail="Solo administradores y administrativos pueden crear rutas"
             )
 
-        # Verify company ownership
-        company = db.query(Company).filter(
-            Company.id == route.company_id,
-            Company.admin_id == current_user.id
-        ).first()
+        # Verify company access based on role
+        if current_user.role == UserRole.ADMIN:
+            # Admin must own the company
+            company = db.query(Company).filter(
+                Company.id == route.company_id,
+                Company.admin_id == current_user.id
+            ).first()
+        else:
+            # ADMINISTRATIVO must belong to the company
+            company = db.query(Company).filter(
+                Company.id == route.company_id,
+                Company.id == current_user.company_id
+            ).first()
 
         if not company:
             raise HTTPException(
@@ -1152,26 +1203,42 @@ async def update_route(
     current_user: User = Depends(get_current_active_user)
 ):
     try:
+        print(f"Updating route request from user: {current_user.email} (role: {current_user.role})")
+        print(f"Route ID: {route_id}")
+        print(f"Update data: {route_update.model_dump()}")
+
         # Check permissions
         if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+            print(f"Permission denied for user {current_user.email}")
             raise HTTPException(
                 status_code=403,
                 detail="Solo administradores y administrativos pueden modificar rutas"
             )
 
-        # Get route and verify ownership
-        route = db.query(Route).filter(
-            Route.id == route_id,
-            Route.company_id.in_(
-                db.query(Company.id).filter(Company.admin_id == current_user.id)
-            )
-        ).first()
+        # Get route and verify ownership based on role
+        if current_user.role == UserRole.ADMIN:
+            # Admin must own the company
+            route = db.query(Route).filter(
+                Route.id == route_id,
+                Route.company_id.in_(
+                    db.query(Company.id).filter(Company.admin_id == current_user.id)
+                )
+            ).first()
+        else:
+            # ADMINISTRATIVO must belong to that company
+            route = db.query(Route).filter(
+                Route.id == route_id,
+                Route.company_id == current_user.company_id
+            ).first()
 
         if not route:
+            print(f"Route {route_id} not found or access denied")
             raise HTTPException(
                 status_code=404,
                 detail="Ruta no encontrada o no tiene permisos para modificarla"
             )
+
+        # Rest of validation and update logic...
 
         # Check if route can be updated
         if route.status not in [RouteStatus.ACTIVA, RouteStatus.SUSPENDIDA]:
@@ -1283,6 +1350,55 @@ async def delete_route(
             status_code=500,
             detail=f"Error al eliminar la ruta: {str(e)}"
         )
+
+@app.get("/users/company/{company_id}")
+async def get_company_users(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get users for a specific company"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Verify user belongs to company
+    if current_user.role == UserRole.ADMINISTRATIVO and current_user.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this company")
+    
+    users = db.query(User).filter(User.company_id == company_id).all()
+    return users
+
+@app.get("/vehicles/company/{company_id}")
+async def get_company_vehicles(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get vehicles for a specific company"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    if current_user.role == UserRole.ADMINISTRATIVO and current_user.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this company")
+    
+    vehicles = db.query(Vehicle).filter(Vehicle.company_id == company_id).all()
+    return vehicles
+
+@app.get("/routes/company/{company_id}")
+async def get_company_routes(
+    company_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get routes for a specific company"""
+    if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    if current_user.role == UserRole.ADMINISTRATIVO and current_user.company_id != company_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this company")
+    
+    routes = db.query(Route).filter(Route.company_id == company_id).all()
+    return routes
 
 def get_secret_hash(username: str) -> str:
     """Calculate the secret hash for Cognito operations"""

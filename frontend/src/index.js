@@ -6,6 +6,7 @@ import './styles/Login.css';
 import './styles/AdminDashboard.css';
 import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
+import AdministrativosDashboard from './components/AdministrativosDashboard';
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -79,6 +80,14 @@ root.render(
           element={
             <ProtectedRoute>
               <AdminDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/dashboard-administrativo" 
+          element={
+            <ProtectedRoute>
+              <AdministrativosDashboard />
             </ProtectedRoute>
           } 
         />
