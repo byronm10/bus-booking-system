@@ -1,30 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Form, Request
 from fastapi import Body
 from sqlalchemy.orm import Session
-from db import get_db, Base, engine
-from models import (
-    User, 
-    UserRole, 
-    Company, 
-    Vehicle, 
-    VehicleStatus,
-    Route,           # Add these
-    RouteStatus,     # Add these
-    RouteExecution,
-    RepetitionPeriod
-)
-from schemas import (
-    UserCreate, 
-    UserResponse, 
-    CompanyCreate, 
-    CompanyResponse,
-    VehicleCreate,
-    VehicleResponse,
-    RouteCreate,     # Add these
-    RouteResponse,   # Add these
-    RouteExecutionCreate,
-    RouteExecutionResponse
-)
+
+
 from typing import List
 from uuid import UUID
 import hmac
@@ -36,9 +14,7 @@ from auth import verify_admin, get_current_active_user, cognito_client
 from jose import jwt
 import os
 
-from fastapi.security import OAuth2AuthorizationCodeBearer
-from authlib.integrations.starlette_client import OAuth
-from starlette.config import Config
+
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 import json
@@ -52,7 +28,12 @@ import os
 from mangum import Mangum
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
-from api.routes import backend_routes
+
+from backend.services.sdk import Base, engine
+from api.routes import (
+    user_router,
+    companies_router
+)
 
 app = FastAPI()
 
@@ -68,20 +49,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure OAuth
-config = Config('.env')
-oauth = OAuth(config)
-
-oauth.register(
-    name='cognito',
-    server_metadata_url=f"https://cognito-idp.{os.getenv('AWS_REGION')}.amazonaws.com/{os.getenv('COGNITO_USER_POOL_ID')}/.well-known/openid-configuration",
-    client_id=os.getenv('COGNITO_APP_CLIENT_ID'),
-    client_secret=os.getenv('COGNITO_APP_CLIENT_SECRET'),
-    client_kwargs={
-        'scope': 'email openid phone aws.cognito.signin.user.admin',
-        'redirect_uri': 'http://localhost:8000/auth'
-    }
-)
 
 # Initialize database schema
 with engine.connect() as conn:
@@ -112,8 +79,8 @@ with engine.connect() as conn:
 Base.metadata.create_all(bind=engine)
 
 
-
-app.include_router(backend_routes.router)
+app.include_router(user_router.router)
+app.include_router(companies_router.router)
 
 ###############################################################################
 #   Handler for AWS Lambda                                                    #
@@ -131,275 +98,6 @@ if __name__ == "__main__":
 
 
 
-@app.post("/users/", response_model=UserResponse)
-async def create_user(
-    user: UserCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    try:
-        print(f"Creating user with data: {user.model_dump()}")
-        print(f"Current user: {current_user.email} (role: {current_user.role})")
-
-        # Allow both ADMIN and ADMINISTRATIVO to create users
-        if current_user.role not in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
-            raise HTTPException(
-                status_code=403,
-                detail="No tiene permisos para crear usuarios"
-            )
-
-        # ADMINISTRATIVO can't create ADMIN or other ADMINISTRATIVO users
-        if current_user.role == UserRole.ADMINISTRATIVO and user.role in [UserRole.ADMIN, UserRole.ADMINISTRATIVO]:
-            raise HTTPException(
-                status_code=403,
-                detail="No tiene permisos para crear usuarios administrativos o administradores"
-            )
-
-        # Get company based on current user's role
-        if current_user.role == UserRole.ADMIN:
-            company = db.query(Company).filter(
-                Company.id == user.company_id,
-                Company.admin_id == current_user.id
-            ).first()
-        else:  # ADMINISTRATIVO
-            company = db.query(Company).filter(
-                Company.id == current_user.company_id
-            ).first()
-        
-        if not company:
-            print(f"Company not found or access denied")
-            raise HTTPException(
-                status_code=403,
-                detail="No tiene permisos para crear usuarios en esta empresa"
-            )
-
-        # Create user in Cognito
-        print(f"Creating user in Cognito pool")
-        try:
-            cognito_response = cognito_client.admin_create_user(
-                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
-                Username=user.email,
-                UserAttributes=[
-                    {'Name': 'email', 'Value': user.email},
-                    {'Name': 'email_verified', 'Value': 'true'},
-                    {'Name': 'name', 'Value': user.name},
-                    {'Name': 'custom:role', 'Value': user.role}
-                ],
-                TemporaryPassword='Temp@' + os.urandom(4).hex(),
-                DesiredDeliveryMediums=['EMAIL']
-            )
-            print(f"Cognito user created: {cognito_response['User']['Username']}")
-        except Exception as e:
-            print(f"Error creating Cognito user: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error creating Cognito user: {str(e)}"
-            )
-
-        # Add user to company's Cognito group
-        try:
-            print(f"Adding user to Cognito group: {company.cognito_group_id}")
-            cognito_client.admin_add_user_to_group(
-                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
-                Username=user.email,
-                GroupName=company.cognito_group_id
-            )
-        except Exception as e:
-            print(f"Error adding user to Cognito group: {str(e)}")
-            # Clean up Cognito user
-            cognito_client.admin_delete_user(
-                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
-                Username=user.email
-            )
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error adding user to group: {str(e)}"
-            )
-
-        # Create user in database
-        try:
-            db_user = User(
-                **user.model_dump(),
-                cognito_sub=cognito_response['User']['Username']
-            )
-            db.add(db_user)
-            db.commit()
-            db.refresh(db_user)
-            print(f"User created successfully: {db_user.id}")
-            return db_user
-        except Exception as e:
-            print(f"Error creating user in database: {str(e)}")
-            # Clean up Cognito
-            cognito_client.admin_delete_user(
-                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
-                Username=user.email
-            )
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error creating user in database: {str(e)}"
-            )
-
-    except Exception as e:
-        print(f"General error in create_user: {str(e)}")
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error creating user: {str(e)}"
-        )
-
-@app.get("/users/", response_model=List[UserResponse])
-def get_users(
-    db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_active_user)
-):
-    # Get companies administered by current user
-    admin_companies = db.query(Company).filter(
-        Company.admin_id == current_user.id
-    ).all()
-    
-    # Get company IDs administered by current user
-    company_ids = [company.id for company in admin_companies]
-    
-    # Get users belonging to those companies
-    users = db.query(User).filter(User.company_id.in_(company_ids)).all()
-    return users
-
-@app.put("/users/profile", response_model=UserResponse)
-async def update_profile(
-    user_update: UserCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    try:
-        # Check if email is being changed
-        email_changed = user_update.email != current_user.email
-
-        # Update Cognito user
-        cognito_client.admin_update_user_attributes(
-            UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
-            Username=current_user.email,
-            UserAttributes=[
-                {'Name': 'email', 'Value': user_update.email},
-                {'Name': 'name', 'Value': user_update.name}
-            ]
-        )
-
-        # Update database user
-        for key, value in user_update.model_dump().items():
-            if key != 'role':  # Don't allow role changes through profile update
-                setattr(current_user, key, value)
-
-        db.commit()
-        db.refresh(current_user)
-        
-        # Return response with warning if email changed
-        response_data = current_user
-        if email_changed:
-            return JSONResponse(
-                content={
-                    "user": jsonable_encoder(response_data),
-                    "warning": "Su correo electrónico ha sido actualizado. Deberá iniciar sesión con el nuevo correo en su próximo acceso."
-                }
-            )
-        return current_user
-
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/login")
-async def login(username: str = Form(), password: str = Form()):
-    """Handle direct login with username/password"""
-    try:
-        auth_response = cognito_client.initiate_auth(
-            ClientId=os.getenv('COGNITO_APP_CLIENT_ID'),
-            AuthFlow='USER_PASSWORD_AUTH',
-            AuthParameters={
-                'USERNAME': username,
-                'PASSWORD': password
-            }
-        )
-        return {
-            "access_token": auth_response['AuthenticationResult']['AccessToken'],
-            "token_type": "bearer"
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials"
-        )
-
-@app.get("/login")
-async def login_cognito(request: Request):
-    """Initiate Cognito login"""
-    redirect_uri = request.url_for('auth')
-    print(f"Redirect URI: {redirect_uri}")  # Add this line
-    return await oauth.cognito.authorize_redirect(request, redirect_uri)
-
-@app.get("/auth") 
-async def auth(request: Request):
-    """Handle the Cognito callback"""
-    try:
-        token = await oauth.cognito.authorize_access_token(request)
-        
-        if 'access_token' in token:
-            # Get Cognito user info
-            userinfo = await oauth.cognito.userinfo(token=token)
-            email = userinfo.get('email')
-            sub = userinfo.get('sub')
-            
-            # Get database connection
-            db = next(get_db())
-            
-            # Primero intentar encontrar usuario por cognito_sub
-            user = db.query(User).filter(User.cognito_sub == sub).first()
-            if not user:
-                # Si no se encuentra por cognito_sub, buscar por email
-                user = db.query(User).filter(User.email == email).first()
-                if user and not user.cognito_sub:  # Changed && to and
-                    # Si existe el usuario pero no tiene cognito_sub, actualizarlo
-                    user.cognito_sub = sub
-                    db.commit()
-                elif not user:
-                    # Solo crear nuevo usuario si no existe ni por sub ni por email
-                    raise HTTPException(
-                        status_code=400, 
-                        detail="Usuario no encontrado en el sistema"
-                    )
-            
-            # Redirect to frontend with access token
-            frontend_url = "http://localhost:3000"
-            response = RedirectResponse(
-                url=f"{frontend_url}?token={token['access_token']}"
-            )
-            return response
-            
-        raise HTTPException(status_code=400, detail="Invalid token")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/logout")
-async def logout(request: Request):
-    """Handle Cognito logout"""
-    try:
-        # Clear session
-        request.session.clear()
-        
-        # Construct the correct Cognito domain
-        cognito_domain = f"https://us-east-{os.getenv('COGNITO_DOMAIN')}.auth.{os.getenv('AWS_REGION')}.amazoncognito.com"
-        
-        # Construct logout URL with correct parameters
-        logout_url = (
-            f"{cognito_domain}/logout?"
-            f"client_id={os.getenv('COGNITO_APP_CLIENT_ID')}&"
-            f"logout_uri=http://localhost:3000"  # Changed from client_id to actual URL
-        )
-        
-        return {"logoutUrl": logout_url}
-        
-    except Exception as e:
-        print(f"Logout error: {str(e)}")
-        return {"logoutUrl": "http://localhost:3000"}
 
 @app.post("/companies/", response_model=CompanyResponse)
 async def create_company(
