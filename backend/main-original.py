@@ -35,7 +35,7 @@ from sqlalchemy import create_engine, text
 from auth import verify_admin, get_current_active_user, cognito_client
 from jose import jwt
 import os
-
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2AuthorizationCodeBearer
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
@@ -44,15 +44,6 @@ from starlette.responses import RedirectResponse
 import json
 from botocore.exceptions import ClientError
 from fastapi.responses import JSONResponse
-
-
-
-from fastapi import FastAPI, HTTPException
-import os
-from mangum import Mangum
-import uvicorn
-from fastapi.middleware.cors import CORSMiddleware
-from api.routes import backend_routes
 
 app = FastAPI()
 
@@ -110,29 +101,6 @@ with engine.connect() as conn:
 
 # Create tables if they don't exist
 Base.metadata.create_all(bind=engine)
-
-
-
-app.include_router(backend_routes.router)
-
-###############################################################################
-#   Handler for AWS Lambda                                                    #
-###############################################################################
-
-handler = Mangum(app)
-
-###############################################################################
-#   Run the self contained application                                        #
-###############################################################################
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-
-
-
-
 
 # Re-insert admin user if needed
 @app.on_event("startup")

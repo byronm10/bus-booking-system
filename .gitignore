@@ -1,5 +1,6 @@
 *.env
-packages-lock.json
+# packages-lock.json
 package.json
 __pycache__
 backend/backend/
+frontend/node_modules
