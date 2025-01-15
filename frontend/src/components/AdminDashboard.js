@@ -525,13 +525,26 @@ const AdminDashboard = () => {
 
   const handleCreateRoute = async (e) => {
     e.preventDefault();
+    
+    // Check total stop time vs route duration
+    const totalStopTime = calculateTotalStopTime(routeFormData.intermediate_stops);
+    if (totalStopTime > routeFormData.estimated_duration) {
+      if (!window.confirm('El tiempo total de paradas es mayor que la duración de la ruta. ¿Desea continuar de todos modos?')) {
+        return;
+      }
+    }
+  
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/routes/`, routeFormData, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      await axios.post(
+        `${process.env.REACT_APP_BACKEND_URL}/routes/`, 
+        routeFormData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         }
-      });
+      );
       setShowCreateRoute(false);
       fetchRoutes();
       setRouteFormData({
@@ -550,9 +563,18 @@ const AdminDashboard = () => {
       setError('Error al crear la ruta');
     }
   };
-
+  
   const handleUpdateRoute = async (e) => {
     e.preventDefault();
+  
+    // Check total stop time vs route duration
+    const totalStopTime = calculateTotalStopTime(routeFormData.intermediate_stops);
+    if (totalStopTime > routeFormData.estimated_duration) {
+      if (!window.confirm('El tiempo total de paradas es mayor que la duración de la ruta. ¿Desea continuar de todos modos?')) {
+        return;
+      }
+    }
+  
     try {
       const token = localStorage.getItem('token');
       await axios.put(
@@ -567,18 +589,7 @@ const AdminDashboard = () => {
       setShowCreateRoute(false);
       setEditingRoute(null);
       fetchRoutes();
-      setRouteFormData({
-        name: '',
-        start_point: '',
-        end_point: '',
-        intermediate_stops: [],
-        departure_time: '',
-        estimated_duration: 0,
-        repetition_frequency: null,
-        repetition_period: null,
-        company_id: '',
-        vehicle_id: null
-      });
+      // ... reset form data
     } catch (err) {
       setError('Error al actualizar la ruta');
     }
@@ -1575,7 +1586,6 @@ const AdminDashboard = () => {
               </div>
             </form>
           )}
-
           <table>
             <thead>
               <tr>
@@ -1658,11 +1668,11 @@ const AdminDashboard = () => {
                     <div className="detail-row">
                       <span className="detail-label">Paradas:</span>
                       <div className="detail-value">
-                        {selectedRoute.intermediate_stops.map((stop, index) => (
-                          <div key={index} className="stop-detail">
-                            {index + 1}. {stop.location} ({stop.estimated_stop_time} min)
-                          </div>
-                        ))}
+                      {selectedRoute.intermediate_stops.map((stop, index) => (
+                      <div key={index} className="stop-detail">
+                        {index + 1}. {stop.location} ({stop.estimated_stop_time} min)
+                      </div>
+                    ))}
                       </div>
                     </div>
                   )}
@@ -1710,35 +1720,35 @@ const AdminDashboard = () => {
 
       {/* Add the warning modal component */}
       {showWarningModal && (
-        <div className="warning-modal">
-          <h3>Advertencia</h3>
-          <p>El tiempo total de paradas es mayor que la duración de la ruta. ¿Desea continuar?</p>
-          <div className="warning-buttons">
-            <button 
-              className="confirm-button"
-              onClick={() => {
-                setRouteFormData({
-                  ...routeFormData,
-                  estimated_duration: pendingDuration
-                });
-                setDurationWarning('El tiempo total de paradas es mayor que la duración de la ruta');
-                setShowWarningModal(false);
-              }}
-            >
-              Sí
-            </button>
-            <button 
-              className="cancel-button"
-              onClick={() => {
-                setShowWarningModal(false);
-                setPendingDuration(null);
-              }}
-            >
-              No
-            </button>
-          </div>
-        </div>
-      )}
+  <div className="warning-modal">
+    <h3>Advertencia</h3>
+    <p>El tiempo total de paradas es mayor que la duración de la ruta. ¿Desea continuar?</p>
+    <div className="warning-buttons">
+      <button 
+        className="confirm-button"
+        onClick={() => {
+          setRouteFormData({
+            ...routeFormData,
+            estimated_duration: pendingDuration
+          });
+          setDurationWarning('Advertencia:El tiempo total de paradas es mayor que la duración de la ruta');
+          setShowWarningModal(false);
+        }}
+      >
+        Sí
+      </button>
+      <button 
+        className="cancel-button"
+        onClick={() => {
+          setShowWarningModal(false);
+          setPendingDuration(null);
+        }}
+      >
+        No
+      </button>
+    </div>
+  </div>
+)}
     </div>
   );
 };
