@@ -18,6 +18,11 @@ const formatLocalDateTime = (utcDateTime) => {
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 };
 
+// Add this helper function at the top of both files
+const calculateTotalStopTime = (stops) => {
+  return stops.reduce((total, stop) => total + stop.estimated_stop_time, 0);
+};
+
 const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -89,8 +94,18 @@ const AdminDashboard = () => {
   // Add this state for managing intermediate stops
   const [stopFormData, setStopFormData] = useState({
     location: '',
-    estimated_stop_time: 0
+    estimated_stop_time: 0,
+    days: 0,
+    hours: 0,
+    minutes: 0
   });
+
+  // Add this state for warning message
+  const [durationWarning, setDurationWarning] = useState('');
+
+  // Add new state for warning modal
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [pendingDuration, setPendingDuration] = useState(null);
 
   const fetchUsers = async () => {
     try {
@@ -623,18 +638,28 @@ const AdminDashboard = () => {
   // Add this function to handle adding stops
   const addIntermediateStop = () => {
     if (stopFormData.location && stopFormData.estimated_stop_time > 0) {
+      const newStops = [
+        ...routeFormData.intermediate_stops,
+        {
+          location: stopFormData.location,
+          coordinates: null,
+          estimated_stop_time: parseInt(stopFormData.estimated_stop_time)
+        }
+      ];
+      
+      // Check total stop time
+      const totalStopTime = calculateTotalStopTime(newStops);
+      if (totalStopTime > routeFormData.estimated_duration) {
+        setDurationWarning('El tiempo total de paradas es mayor que la duración de la ruta');
+      } else {
+        setDurationWarning('');
+      }
+      
       setRouteFormData({
         ...routeFormData,
-        intermediate_stops: [
-          ...routeFormData.intermediate_stops,
-          {
-            location: stopFormData.location,
-            coordinates: null,
-            estimated_stop_time: parseInt(stopFormData.estimated_stop_time)
-          }
-        ]
+        intermediate_stops: newStops
       });
-      setStopFormData({ location: '', estimated_stop_time: 0 });
+      setStopFormData({ location: '', estimated_stop_time: 0, days: 0, hours: 0, minutes: 0 });
     }
   };
 
@@ -644,6 +669,23 @@ const AdminDashboard = () => {
       ...routeFormData,
       intermediate_stops: routeFormData.intermediate_stops.filter((_, i) => i !== index)
     });
+  };
+
+  // Update the duration change handler
+  const handleDurationChange = (days, hours, minutes) => {
+    const newDuration = (days * 1440) + (hours * 60) + minutes;
+    const totalStopTime = calculateTotalStopTime(routeFormData.intermediate_stops);
+    
+    if (totalStopTime > newDuration) {
+      setPendingDuration(newDuration);
+      setShowWarningModal(true);
+    } else {
+      setDurationWarning('');
+      setRouteFormData({
+        ...routeFormData,
+        estimated_duration: newDuration
+      });
+    }
   };
 
   const showUserDetailsModal = (user) => {
@@ -1324,11 +1366,9 @@ const AdminDashboard = () => {
                     value={Math.floor(routeFormData.estimated_duration / 1440)}
                     onChange={(e) => {
                       const days = parseInt(e.target.value) || 0;
-                      const remainingMinutes = routeFormData.estimated_duration % 1440;
-                      setRouteFormData({
-                        ...routeFormData,
-                        estimated_duration: (days * 1440) + remainingMinutes
-                      });
+                      const hours = Math.floor((routeFormData.estimated_duration % 1440) / 60);
+                      const minutes = routeFormData.estimated_duration % 60;
+                      handleDurationChange(days, hours, minutes);
                     }}
                   />
                 </div>
@@ -1343,10 +1383,7 @@ const AdminDashboard = () => {
                       const hours = parseInt(e.target.value) || 0;
                       const days = Math.floor(routeFormData.estimated_duration / 1440);
                       const minutes = routeFormData.estimated_duration % 60;
-                      setRouteFormData({
-                        ...routeFormData,
-                        estimated_duration: (days * 1440) + (hours * 60) + minutes
-                      });
+                      handleDurationChange(days, hours, minutes);
                     }}
                   />
                 </div>
@@ -1361,14 +1398,18 @@ const AdminDashboard = () => {
                       const minutes = parseInt(e.target.value) || 0;
                       const days = Math.floor(routeFormData.estimated_duration / 1440);
                       const hours = Math.floor((routeFormData.estimated_duration % 1440) / 60);
-                      setRouteFormData({
-                        ...routeFormData,
-                        estimated_duration: (days * 1440) + (hours * 60) + minutes
-                      });
+                      handleDurationChange(days, hours, minutes);
                     }}
                   />
                 </div>
               </div>
+
+              {/* Duration warning message */}
+              {durationWarning && (
+                <div className="duration-warning">
+                  {durationWarning}
+                </div>
+              )}
 
               {/* Company selection */}
               <select
@@ -1421,33 +1462,62 @@ const AdminDashboard = () => {
                       location: e.target.value
                     })}
                   />
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="Tiempo estimado (min)"
-                    value={stopFormData.estimated_stop_time}
-                    onChange={(e) => setStopFormData({
-                      ...stopFormData,
-                      estimated_stop_time: parseInt(e.target.value) || 0
-                    })}
-                  />
+                  <div className="stop-duration-inputs">
+                    <div className="duration-field">
+                      <label>Días:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={stopFormData.days}
+                        onChange={(e) => {
+                          const days = parseInt(e.target.value) || 0;
+                          setStopFormData({
+                            ...stopFormData,
+                            days,
+                            estimated_stop_time: (days * 1440) + (stopFormData.hours * 60) + stopFormData.minutes
+                          });
+                        }}
+                      />
+                    </div>
+                    <div className="duration-field">
+                      <label>Horas:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="23"
+                        value={stopFormData.hours}
+                        onChange={(e) => {
+                          const hours = parseInt(e.target.value) || 0;
+                          setStopFormData({
+                            ...stopFormData,
+                            hours,
+                            estimated_stop_time: (stopFormData.days * 1440) + (hours * 60) + stopFormData.minutes
+                          });
+                        }}
+                      />
+                    </div>
+                    <div className="duration-field">
+                      <label>Minutos:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={stopFormData.minutes}
+                        onChange={(e) => {
+                          const minutes = parseInt(e.target.value) || 0;
+                          const hours = Math.floor(stopFormData.estimated_stop_time / 60);
+                          setStopFormData({
+                            ...stopFormData,
+                            minutes,
+                            estimated_stop_time: (stopFormData.days * 1440) + (stopFormData.hours * 60) + minutes
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
                   <button 
                     type="button"
-                    onClick={() => {
-                      if (stopFormData.location && stopFormData.estimated_stop_time > 0) {
-                        const newStop = {
-                          location: stopFormData.location,
-                          coordinates: null,
-                          estimated_stop_time: parseInt(stopFormData.estimated_stop_time)
-                        };
-                        setRouteFormData({
-                          ...routeFormData,
-                          intermediate_stops: [...routeFormData.intermediate_stops, newStop]
-                        });
-                        // Reset stop form after adding
-                        setStopFormData({ location: '', estimated_stop_time: 0 });
-                      }
-                    }}
+                    onClick={addIntermediateStop}
                     className="add-stop-button"
                     disabled={!stopFormData.location || stopFormData.estimated_stop_time <= 0}
                   >
@@ -1459,7 +1529,10 @@ const AdminDashboard = () => {
                   {routeFormData.intermediate_stops.map((stop, index) => (
                     <div key={index} className="stop-item">
                       <span>
-                        <strong>{index + 1}.</strong> {stop.location} ({stop.estimated_stop_time} min)
+                        <strong>{index + 1}.</strong> {stop.location} (
+                        {Math.floor(stop.estimated_stop_time / 1440)}d 
+                        {Math.floor((stop.estimated_stop_time % 1440) / 60)}h 
+                        {stop.estimated_stop_time % 60}m)
                       </span>
                       <button 
                         type="button"
@@ -1634,6 +1707,38 @@ const AdminDashboard = () => {
           )}
         </section>
       </div>
+
+      {/* Add the warning modal component */}
+      {showWarningModal && (
+        <div className="warning-modal">
+          <h3>Advertencia</h3>
+          <p>El tiempo total de paradas es mayor que la duración de la ruta. ¿Desea continuar?</p>
+          <div className="warning-buttons">
+            <button 
+              className="confirm-button"
+              onClick={() => {
+                setRouteFormData({
+                  ...routeFormData,
+                  estimated_duration: pendingDuration
+                });
+                setDurationWarning('El tiempo total de paradas es mayor que la duración de la ruta');
+                setShowWarningModal(false);
+              }}
+            >
+              Sí
+            </button>
+            <button 
+              className="cancel-button"
+              onClick={() => {
+                setShowWarningModal(false);
+                setPendingDuration(null);
+              }}
+            >
+              No
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

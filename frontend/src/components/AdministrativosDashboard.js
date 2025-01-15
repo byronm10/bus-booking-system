@@ -10,6 +10,11 @@ const formatLocalDateTime = (utcDateTime) => {
   return `${datePart} ${timeWithoutZ}`;
 };
 
+// Add this helper function at the top of both files
+const calculateTotalStopTime = (stops) => {
+  return stops.reduce((total, stop) => total + stop.estimated_stop_time, 0);
+};
+
 const AdministrativosDashboard = () => {
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -68,6 +73,9 @@ const AdministrativosDashboard = () => {
     location: '',
     estimated_stop_time: 0
   });
+
+  // Add this state for warning message
+  const [durationWarning, setDurationWarning] = useState('');
 
   // Fetch data for the administrative user's company
   const fetchData = useCallback(async () => {
@@ -365,16 +373,26 @@ const AdministrativosDashboard = () => {
   // Add this function to handle adding stops
   const addIntermediateStop = () => {
     if (stopFormData.location && stopFormData.estimated_stop_time > 0) {
+      const newStops = [
+        ...routeFormData.intermediate_stops,
+        {
+          location: stopFormData.location,
+          coordinates: null,
+          estimated_stop_time: parseInt(stopFormData.estimated_stop_time)
+        }
+      ];
+      
+      // Check total stop time
+      const totalStopTime = calculateTotalStopTime(newStops);
+      if (totalStopTime > routeFormData.estimated_duration) {
+        setDurationWarning('El tiempo total de paradas es mayor que la duración de la ruta');
+      } else {
+        setDurationWarning('');
+      }
+      
       setRouteFormData({
         ...routeFormData,
-        intermediate_stops: [
-          ...routeFormData.intermediate_stops,
-          {
-            location: stopFormData.location,
-            coordinates: null,
-            estimated_stop_time: parseInt(stopFormData.estimated_stop_time)
-          }
-        ]
+        intermediate_stops: newStops
       });
       setStopFormData({ location: '', estimated_stop_time: 0 });
     }
@@ -934,10 +952,21 @@ const AdministrativosDashboard = () => {
                     value={Math.floor(routeFormData.estimated_duration / 1440)}
                     onChange={(e) => {
                       const days = parseInt(e.target.value) || 0;
-                      const remainingMinutes = routeFormData.estimated_duration % 1440;
+                      const hours = Math.floor((routeFormData.estimated_duration % 1440) / 60);
+                      const minutes = routeFormData.estimated_duration % 60;
+                      const newDuration = (days * 1440) + (hours * 60) + minutes;
+                      
+                      // Check total stop time
+                      const totalStopTime = calculateTotalStopTime(routeFormData.intermediate_stops);
+                      if (totalStopTime > newDuration) {
+                        setDurationWarning('El tiempo total de paradas es mayor que la duración de la ruta');
+                      } else {
+                        setDurationWarning('');
+                      }
+                      
                       setRouteFormData({
                         ...routeFormData,
-                        estimated_duration: (days * 1440) + remainingMinutes
+                        estimated_duration: newDuration
                       });
                     }}
                   />
@@ -953,9 +982,19 @@ const AdministrativosDashboard = () => {
                       const hours = parseInt(e.target.value) || 0;
                       const days = Math.floor(routeFormData.estimated_duration / 1440);
                       const minutes = routeFormData.estimated_duration % 60;
+                      const newDuration = (days * 1440) + (hours * 60) + minutes;
+                      
+                      // Check total stop time
+                      const totalStopTime = calculateTotalStopTime(routeFormData.intermediate_stops);
+                      if (totalStopTime > newDuration) {
+                        setDurationWarning('El tiempo total de paradas es mayor que la duración de la ruta');
+                      } else {
+                        setDurationWarning('');
+                      }
+                      
                       setRouteFormData({
                         ...routeFormData,
-                        estimated_duration: (days * 1440) + (hours * 60) + minutes
+                        estimated_duration: newDuration
                       });
                     }}
                   />
@@ -971,14 +1010,31 @@ const AdministrativosDashboard = () => {
                       const minutes = parseInt(e.target.value) || 0;
                       const days = Math.floor(routeFormData.estimated_duration / 1440);
                       const hours = Math.floor((routeFormData.estimated_duration % 1440) / 60);
+                      const newDuration = (days * 1440) + (hours * 60) + minutes;
+                      
+                      // Check total stop time
+                      const totalStopTime = calculateTotalStopTime(routeFormData.intermediate_stops);
+                      if (totalStopTime > newDuration) {
+                        setDurationWarning('El tiempo total de paradas es mayor que la duración de la ruta');
+                      } else {
+                        setDurationWarning('');
+                      }
+                      
                       setRouteFormData({
                         ...routeFormData,
-                        estimated_duration: (days * 1440) + (hours * 60) + minutes
+                        estimated_duration: newDuration
                       });
                     }}
                   />
                 </div>
               </div>
+
+              {/* Duration warning message */}
+              {durationWarning && (
+                <div className="duration-warning">
+                  {durationWarning}
+                </div>
+              )}
 
               {/* Vehicle selection */}
               <select
@@ -1008,30 +1064,59 @@ const AdministrativosDashboard = () => {
                       location: e.target.value
                     })}
                   />
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="Tiempo estimado (min)"
-                    value={stopFormData.estimated_stop_time}
-                    onChange={(e) => setStopFormData({
-                      ...stopFormData,
-                      estimated_stop_time: parseInt(e.target.value) || 0
-                    })}
-                  />
+                  <div className="stop-duration-inputs">
+                    <div className="duration-field">
+                      <label>Horas:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="23"
+                        value={Math.floor(stopFormData.estimated_stop_time / 60)}
+                        onChange={(e) => {
+                          const hours = parseInt(e.target.value) || 0;
+                          const minutes = stopFormData.estimated_stop_time % 60;
+                          setStopFormData({
+                            ...stopFormData,
+                            estimated_stop_time: (hours * 60) + minutes
+                          });
+                        }}
+                      />
+                    </div>
+                    <div className="duration-field">
+                      <label>Minutos:</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={stopFormData.estimated_stop_time % 60}
+                        onChange={(e) => {
+                          const minutes = parseInt(e.target.value) || 0;
+                          const hours = Math.floor(stopFormData.estimated_stop_time / 60);
+                          setStopFormData({
+                            ...stopFormData,
+                            estimated_stop_time: (hours * 60) + minutes
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
                   <button 
                     type="button"
                     onClick={addIntermediateStop}
                     className="add-stop-button"
+                    disabled={!stopFormData.location || stopFormData.estimated_stop_time <= 0}
                   >
                     Agregar Parada
                   </button>
                 </div>
 
-                {/* List of added stops */}
                 <div className="intermediate-stops-list">
                   {routeFormData.intermediate_stops.map((stop, index) => (
                     <div key={index} className="stop-item">
-                      <span>{stop.location} ({stop.estimated_stop_time} min)</span>
+                      <span>
+                        <strong>{index + 1}.</strong> {stop.location} (
+                        {Math.floor(stop.estimated_stop_time / 60)}h {stop.estimated_stop_time % 60}m)
+                      </span>
                       <button 
                         type="button"
                         onClick={() => removeIntermediateStop(index)}
