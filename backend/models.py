@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Table, Enum, Integer, func
+from sqlalchemy import Column, String, DateTime, ForeignKey, Table, Enum, Integer, func, Numeric
 from sqlalchemy.dialects.postgresql import UUID, ENUM, JSONB
 from sqlalchemy.orm import relationship
 from db import Base 
@@ -119,6 +119,8 @@ class Route(Base):
     vehicle_id = Column(UUID(as_uuid=True), ForeignKey('vehicles.id'), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())  # Add this
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())  # Add this
+    base_price = Column(Numeric(10, 2), nullable=False)  # Base price in decimal with 2 decimal places
+    stop_prices = Column(JSONB, nullable=True, default=[])  # Prices for intermediate stops
 
     # Relationships
     company = relationship("Company", back_populates="routes")

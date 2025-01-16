@@ -3,6 +3,7 @@ from uuid import UUID
 from typing import Optional, List
 from models import UserRole, VehicleStatus, RouteStatus, RepetitionPeriod  # Add RouteStatus and RepetitionPeriod here
 from datetime import datetime
+from decimal import Decimal
 
 class UserCreate(BaseModel):
     name: str
@@ -59,10 +60,15 @@ class VehicleResponse(VehicleCreate):
     class Config:
         from_attributes = True
 
+class StopPrice(BaseModel):
+    stop_index: int
+    price: Decimal
+
 class IntermediateStop(BaseModel):
     location: str
     coordinates: Optional[dict] = None
     estimated_stop_time: int  # minutes
+    price: Decimal = Decimal('0.00')  # Add default value
 
 class RouteCreate(BaseModel):
     name: str
@@ -75,6 +81,7 @@ class RouteCreate(BaseModel):
     repetition_period: Optional[str] = None
     company_id: UUID
     vehicle_id: Optional[UUID] = None  # Optional manual vehicle assignment
+    base_price: Decimal  # Base price for the complete route
 
 class RouteResponse(RouteCreate):
     id: UUID

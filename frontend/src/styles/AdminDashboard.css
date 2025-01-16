@@ -455,3 +455,28 @@
   background-color: #dc3545;
   color: white;
 }
+
+.price-input {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.price-input input {
+  width: 120px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.stop-price-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.stop-price-input input {
+  width: 100px;
+  padding: 4px 8px;
+}

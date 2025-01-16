@@ -82,7 +82,8 @@ const AdminDashboard = () => {
     repetition_frequency: null,
     repetition_period: null,
     company_id: '',
-    vehicle_id: null
+    vehicle_id: null,
+    base_price: ''
   });
   const [editingRoute, setEditingRoute] = useState(null);
   const [showVehicleDetails, setShowVehicleDetails] = useState(false);
@@ -97,7 +98,8 @@ const AdminDashboard = () => {
     estimated_stop_time: 0,
     days: 0,
     hours: 0,
-    minutes: 0
+    minutes: 0,
+    price: ''
   });
 
   // Add this state for warning message
@@ -557,7 +559,8 @@ const AdminDashboard = () => {
         repetition_frequency: null,
         repetition_period: null,
         company_id: '',
-        vehicle_id: null
+        vehicle_id: null,
+        base_price: ''
       });
     } catch (err) {
       setError('Error al crear la ruta');
@@ -641,20 +644,22 @@ const AdminDashboard = () => {
       repetition_frequency: route.repetition_frequency,
       repetition_period: route.repetition_period,
       company_id: route.company_id,
-      vehicle_id: route.vehicle_id
+      vehicle_id: route.vehicle_id,
+      base_price: route.base_price
     });
     setShowCreateRoute(true);
   };
 
   // Add this function to handle adding stops
   const addIntermediateStop = () => {
-    if (stopFormData.location && stopFormData.estimated_stop_time > 0) {
+    if (stopFormData.location && stopFormData.estimated_stop_time > 0 && stopFormData.price >= 0) {
       const newStops = [
         ...routeFormData.intermediate_stops,
         {
           location: stopFormData.location,
           coordinates: null,
-          estimated_stop_time: parseInt(stopFormData.estimated_stop_time)
+          estimated_stop_time: parseInt(stopFormData.estimated_stop_time),
+          price: parseFloat(stopFormData.price) || 0
         }
       ];
       
@@ -670,7 +675,14 @@ const AdminDashboard = () => {
         ...routeFormData,
         intermediate_stops: newStops
       });
-      setStopFormData({ location: '', estimated_stop_time: 0, days: 0, hours: 0, minutes: 0 });
+      setStopFormData({
+        location: '',
+        estimated_stop_time: 0,
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        price: ''
+      });
     }
   };
 
@@ -822,13 +834,6 @@ const AdminDashboard = () => {
                 onChange={(e) => setFormData({...formData, phone: e.target.value})}
                 required
               />
-              <input
-                type="text"
-                placeholder="Dirección"
-                value={formData.address}
-                onChange={(e) => setFormData({...formData, address: e.target.value})}
-                required
-              />
               <div className="form-buttons">
                 <button type="submit">{editingCompany ? 'Actualizar' : 'Guardar'}</button>
                 <button 
@@ -888,42 +893,6 @@ const AdminDashboard = () => {
               ))}
             </tbody>
           </table>
-
-          {/* Modal de detalles */}
-          {showDetails && selectedCompany && (
-            <div className="modal-overlay">
-              <div className="modal-content">
-                <h2>Detalles de la Empresa</h2>
-                <div className="company-details">
-                  <div className="detail-row">
-                    <span className="detail-label">Nombre:</span>
-                    <span className="detail-value">{selectedCompany.name}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">NIT:</span>
-                    <span className="detail-value">{selectedCompany.nit}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Email:</span>
-                    <span className="detail-value">{selectedCompany.email}</span>
-                  </div>
-                  <div className="detail-row">
-                    <span className="detail-label">Teléfono:</span>
-                    <span className="detail-value">{selectedCompany.phone}</span>
-                  </div>
-                </div>
-                <button 
-                  className="close-button"
-                  onClick={() => {
-                    setShowDetails(false);
-                    setSelectedCompany(null);
-                  }}
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          )}
         </section>
 
         <div className="users-list">
@@ -1526,6 +1495,20 @@ const AdminDashboard = () => {
                       />
                     </div>
                   </div>
+                  <div className="stop-price-input">
+                    <label>Precio hasta esta parada:</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={stopFormData.price}
+                      onChange={(e) => setStopFormData({
+                        ...stopFormData,
+                        price: parseFloat(e.target.value) || 0
+                      })}
+                      required
+                    />
+                  </div>
                   <button 
                     type="button"
                     onClick={addIntermediateStop}
@@ -1557,6 +1540,21 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
+              <div className="price-input">
+                <label>Precio Base:</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={routeFormData.base_price}
+                  onChange={(e) => setRouteFormData({
+                    ...routeFormData,
+                    base_price: parseFloat(e.target.value) || 0
+                  })}
+                  required
+                />
+              </div>
+
               {/* Botones del formulario separados de la sección de paradas */}
               <div className="form-buttons">
                 <button type="submit">
@@ -1577,7 +1575,8 @@ const AdminDashboard = () => {
                       repetition_frequency: null,
                       repetition_period: null,
                       company_id: '',
-                      vehicle_id: null
+                      vehicle_id: null,
+                      base_price: ''
                     });
                   }}
                 >
@@ -1596,7 +1595,7 @@ const AdminDashboard = () => {
                 <th>Duración</th>
                 <th>Empresa</th>
                 <th>Vehículo</th>
-                <th>Estado</th>
+                <th>Precio Base</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -1611,16 +1610,9 @@ const AdminDashboard = () => {
                   <td>{companies.find(c => c.id === route.company_id)?.name || '-'}</td>
                   <td>{vehicles.find(v => v.id === route.vehicle_id)?.plate_number || '-'}</td>
                   <td>
-                    <select
-                      value={route.status}
-                      onChange={(e) => handleRouteStatusChange(route.id, e.target.value)}
-                      className={`status-select status-${route.status.toLowerCase()}`}
-                    >
-                      <option value="ACTIVA">Activa</option>
-                      <option value="EN_EJECUCION">En Ejecución</option>
-                      <option value="COMPLETADA">Completada</option>
-                      <option value="SUSPENDIDA">Suspendida</option>
-                    </select>
+                    ${typeof route.base_price === 'string' 
+                      ? parseFloat(route.base_price).toFixed(2) 
+                      : route.base_price?.toFixed(2) || '0.00'}
                   </td>
                   <td>
                     <button 
@@ -1665,17 +1657,19 @@ const AdminDashboard = () => {
                     <span className="detail-value">{selectedRoute.end_point}</span>
                   </div>
                   {selectedRoute.intermediate_stops?.length > 0 && (
-                    <div className="detail-row">
-                      <span className="detail-label">Paradas:</span>
-                      <div className="detail-value">
+                  <div className="detail-row">
+                    <span className="detail-label">Paradas:</span>
+                    <div className="detail-value">
                       {selectedRoute.intermediate_stops.map((stop, index) => (
-                      <div key={index} className="stop-detail">
-                        {index + 1}. {stop.location} ({stop.estimated_stop_time} min)
-                      </div>
-                    ))}
-                      </div>
+                        <div key={index} className="stop-detail">
+                          {index + 1}. {stop.location} ({stop.estimated_stop_time} min) - ${typeof stop.price === 'string' 
+                            ? parseFloat(stop.price).toFixed(2)
+                            : stop.price?.toFixed(2) || '0.00'}
+                        </div>
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
                   <div className="detail-row">
                     <span className="detail-label">Salida:</span>
                     <span className="detail-value">
@@ -1702,6 +1696,29 @@ const AdminDashboard = () => {
                     <span className="detail-label">Estado:</span>
                     <span className="detail-value">{selectedRoute.status}</span>
                   </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Precio Base:</span>
+                    <span className="detail-value">
+                      ${typeof selectedRoute.base_price === 'string'
+                        ? parseFloat(selectedRoute.base_price).toFixed(2)
+                        : selectedRoute.base_price?.toFixed(2) || '0.00'}
+                    </span>
+                  </div>
+                  {selectedRoute.intermediate_stops?.length > 0 && (
+                    <div className="detail-row">
+                      <span className="detail-label">Paradas:</span>
+                      <div className="detail-value">
+                        {selectedRoute.intermediate_stops.map((stop, index) => (
+                          <div key={index} className="stop-detail">
+                            {index + 1}. {stop.location} ({stop.estimated_stop_time} min) - $
+                            {typeof stop.price === 'string' 
+                              ? parseFloat(stop.price).toFixed(2)
+                              : stop.price?.toFixed(2) || '0.00'}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button 
                   className="close-button"

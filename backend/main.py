@@ -1133,23 +1133,49 @@ async def create_route(
     try:
         print(f"Creating route request from user: {current_user.email} (role: {current_user.role})")
         print(f"Route data: {route.model_dump()}")
-
+        
         # Check permissions and verify company access - keep this part
+        
+        # Validate prices
+        if route.base_price < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="El precio base no puede ser negativo"
+            )
+        
+        for stop in route.intermediate_stops:
+            if stop.price < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Los precios de las paradas no pueden ser negativos"
+                )
+            if stop.price > route.base_price:
+                raise HTTPException(
+                    status_code=400,
+                    detail="El precio de una parada no puede ser mayor al precio base"
+                )
 
         # Create route
         route_data = route.model_dump()
         
         # Convert intermediate stops to JSON format
         if route.intermediate_stops:
-            route_data['intermediate_stops'] = [stop.model_dump() for stop in route.intermediate_stops]
-        
+            route_data['intermediate_stops'] = [
+                {
+                    "location": stop.location,
+                    "coordinates": stop.coordinates,
+                    "estimated_stop_time": stop.estimated_stop_time,
+                    "price": float(stop.price)  # Convert Decimal to float for JSON
+                }
+                for stop in route.intermediate_stops
+            ]
+            
         db_route = Route(**route_data)
         db.add(db_route)
         db.commit()
         db.refresh(db_route)
-
         return db_route
-
+        
     except Exception as e:
         print(f"Error creating route: {str(e)}")
         db.rollback()
@@ -1164,21 +1190,39 @@ async def get_routes(
     current_user: User = Depends(get_current_active_user)
 ):
     try:
-        # Get companies administered by current user
-        companies = db.query(Company).filter(
-            Company.admin_id == current_user.id
-        ).all()
+        print(f"Fetching routes for user: {current_user.email} (role: {current_user.role})")
         
-        company_ids = [company.id for company in companies]
+        # Get companies administered by current user
+        if current_user.role == UserRole.ADMIN:
+            print("User is ADMIN, fetching companies they administer...")
+            companies = db.query(Company).filter(
+                Company.admin_id == current_user.id
+            ).all()
+            company_ids = [company.id for company in companies]
+            print(f"Found {len(company_ids)} companies: {company_ids}")
+        else:
+            print(f"User is {current_user.role}, fetching routes for their company...")
+            company_ids = [current_user.company_id]
+            print(f"Company ID: {current_user.company_id}")
         
         # Get routes for those companies
+        print("Querying routes...")
         routes = db.query(Route).filter(
             Route.company_id.in_(company_ids)
         ).all()
+        print(f"Found {len(routes)} routes")
+        
+        # Log route details for debugging
+        for route in routes:
+            print(f"Route: {route.id}, Name: {route.name}, Company: {route.company_id}")
         
         return routes
 
     except Exception as e:
+        print(f"Error in get_routes: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail=f"Error al obtener las rutas: {str(e)}"
