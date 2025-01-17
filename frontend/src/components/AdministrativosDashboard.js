@@ -48,7 +48,9 @@ const AdministrativosDashboard = () => {
     repetition_period: null,
     company_id: currentUser?.company_id || '',
     vehicle_id: null,
-    base_price: ''
+    base_price: '',
+    driver_id: null,
+    helper_id: null
   });
   const [editingRoute, setEditingRoute] = useState(null);
 
@@ -291,7 +293,9 @@ const AdministrativosDashboard = () => {
         repetition_period: null,
         company_id: currentUser.company_id,
         vehicle_id: null,
-        base_price: ''
+        base_price: '',
+        driver_id: null,
+        helper_id: null
       });
     } catch (err) {
       setError('Error al crear la ruta');
@@ -362,14 +366,19 @@ const AdministrativosDashboard = () => {
       name: route.name,
       start_point: route.start_point,
       end_point: route.end_point,
-      intermediate_stops: route.intermediate_stops || [],
+      intermediate_stops: route.intermediate_stops.map(stop => ({
+        ...stop,
+        price: parseFloat(stop.price) || 0
+      })) || [],
       departure_time: new Date(route.departure_time).toISOString().slice(0, 16),
       estimated_duration: route.estimated_duration,
       repetition_frequency: route.repetition_frequency,
       repetition_period: route.repetition_period,
       company_id: route.company_id,
       vehicle_id: route.vehicle_id,
-      base_price: route.base_price || ''
+      base_price: parseFloat(route.base_price) || 0,
+      driver_id: route.driver_id,
+      helper_id: route.helper_id
     });
     setShowCreateRoute(true);
   };
@@ -570,6 +579,7 @@ const AdministrativosDashboard = () => {
                 <option value="">Seleccionar rol</option>
                 <option value="OPERADOR">Operador</option>
                 <option value="CONDUCTOR">Conductor</option>
+                <option value="AYUDANTE">Ayudante</option>
                 <option value="PASAJERO">Pasajero</option>
                 <option value="TECNICO">Técnico</option>
                 <option value="JEFE_TALLER">Jefe de Taller</option>
@@ -1156,8 +1166,29 @@ const AdministrativosDashboard = () => {
                     <div key={index} className="stop-item">
                       <span>
                         <strong>{index + 1}.</strong> {stop.location} (
-                        {Math.floor(stop.estimated_stop_time / 60)}h {stop.estimated_stop_time % 60}m) - ${stop.price.toFixed(2)}
+                        {Math.floor(stop.estimated_stop_time / 1440)}d 
+                        {Math.floor((stop.estimated_stop_time % 1440) / 60)}h 
+                        {stop.estimated_stop_time % 60}m)
                       </span>
+                      <div className="stop-price-edit">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={stop.price}
+                          onChange={(e) => {
+                            const newStops = [...routeFormData.intermediate_stops];
+                            newStops[index] = {
+                              ...newStops[index],
+                              price: parseFloat(e.target.value) || 0
+                            };
+                            setRouteFormData({
+                              ...routeFormData,
+                              intermediate_stops: newStops
+                            });
+                          }}
+                        />
+                      </div>
                       <button 
                         type="button"
                         onClick={() => removeIntermediateStop(index)}
@@ -1168,6 +1199,42 @@ const AdministrativosDashboard = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="staff-selection">
+                <select
+                  value={routeFormData.driver_id || ''}
+                  onChange={(e) => setRouteFormData({
+                    ...routeFormData,
+                    driver_id: e.target.value || null
+                  })}
+                >
+                  <option value="">Seleccionar conductor</option>
+                  {users
+                    .filter(user => user.role === 'CONDUCTOR' && user.company_id === routeFormData.company_id)
+                    .map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                </select>
+
+                <select
+                  value={routeFormData.helper_id || ''}
+                  onChange={(e) => setRouteFormData({
+                    ...routeFormData,
+                    helper_id: e.target.value || null
+                  })}
+                >
+                  <option value="">Seleccionar ayudante</option>
+                  {users
+                    .filter(user => user.role === 'AYUDANTE' && user.company_id === routeFormData.company_id)
+                    .map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                </select>
               </div>
 
               <div className="form-buttons">
@@ -1188,7 +1255,9 @@ const AdministrativosDashboard = () => {
                       repetition_period: null,
                       company_id: currentUser?.company_id || '',
                       vehicle_id: null,
-                      base_price: ''
+                      base_price: '',
+                      driver_id: null,
+                      helper_id: null
                     });
                   }}
                 >
@@ -1276,17 +1345,25 @@ const AdministrativosDashboard = () => {
                     <span className="detail-value">{selectedRoute.end_point}</span>
                   </div>
                   {selectedRoute.intermediate_stops?.length > 0 && (
-                    <div className="detail-row">
-                      <span className="detail-label">Paradas:</span>
-                      <div className="detail-value">
-                        {selectedRoute.intermediate_stops.map((stop, index) => (
-                          <div key={index} className="stop-detail">
-                            {index + 1}. {stop.location} ({stop.estimated_stop_time} min) - ${stop.price.toFixed(2)}
-                          </div>
-                        ))}
-                      </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Paradas:</span>
+                    <div className="detail-value">
+                      {selectedRoute.intermediate_stops.map((stop, index) => (
+                        <div key={index} className="stop-detail">
+                          {index + 1}. {stop.location} (
+                          {Math.floor(stop.estimated_stop_time / 1440)}d 
+                          {Math.floor((stop.estimated_stop_time % 1440) / 60)}h 
+                          {stop.estimated_stop_time % 60}m) - 
+                          <span className="price-value">
+                            ${typeof stop.price === 'string' 
+                              ? parseFloat(stop.price).toFixed(2) 
+                              : stop.price?.toFixed(2) || '0.00'}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
                   <div className="detail-row">
                     <span className="detail-label">Salida:</span>
                     <span className="detail-value">
@@ -1329,6 +1406,18 @@ const AdministrativosDashboard = () => {
                       </div>
                     </div>
                   )}
+                  <div className="detail-row">
+                    <span className="detail-label">Conductor:</span>
+                    <span className="detail-value">
+                      {users.find(u => u.id === selectedRoute.driver_id)?.name || 'No asignado'}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Ayudante:</span>
+                    <span className="detail-value">
+                      {users.find(u => u.id === selectedRoute.helper_id)?.name || 'No asignado'}
+                    </span>
+                  </div>
                 </div>
                 <button 
                   className="close-button"

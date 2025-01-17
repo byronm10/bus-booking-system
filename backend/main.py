@@ -1277,7 +1277,6 @@ async def update_route(
 
         # Get route and verify ownership based on role
         if current_user.role == UserRole.ADMIN:
-            # Admin must own the company
             route = db.query(Route).filter(
                 Route.id == route_id,
                 Route.company_id.in_(
@@ -1285,7 +1284,6 @@ async def update_route(
                 )
             ).first()
         else:
-            # ADMINISTRATIVO must belong to that company
             route = db.query(Route).filter(
                 Route.id == route_id,
                 Route.company_id == current_user.company_id
@@ -1298,37 +1296,43 @@ async def update_route(
                 detail="Ruta no encontrada o no tiene permisos para modificarla"
             )
 
-        # Check if route can be updated
-        if route.status not in [RouteStatus.ACTIVA, RouteStatus.SUSPENDIDA]:
-            raise HTTPException(
-                status_code=400,
-                detail="Solo se pueden modificar rutas activas o suspendidas"
-            )
-
-        # Validate intermediate stops
-        if route_update.intermediate_stops:
-            total_stop_time = sum(stop.estimated_stop_time for stop in route_update.intermediate_stops)
-            if total_stop_time >= route_update.estimated_duration:
-                raise HTTPException(
-                    status_code=400,
-                    detail="El tiempo total de paradas no puede ser mayor o igual a la duración estimada de la ruta"
-                )
-
-        # Prepare update data with intermediate stops conversion
+        print("Converting update data...")
         update_data = route_update.model_dump()
+        
+        # Convert Decimal values to float for JSON serialization
         if route_update.intermediate_stops:
-            update_data['intermediate_stops'] = [stop.model_dump() for stop in route_update.intermediate_stops]
+            print("Processing intermediate stops...")
+            update_data['intermediate_stops'] = [
+                {
+                    "location": stop.location,
+                    "coordinates": stop.coordinates,
+                    "estimated_stop_time": stop.estimated_stop_time,
+                    "price": float(stop.price)  # Convert Decimal to float
+                }
+                for stop in route_update.intermediate_stops
+            ]
+            print(f"Processed stops: {update_data['intermediate_stops']}")
+
+        # Convert base_price to float
+        update_data['base_price'] = float(update_data['base_price'])
+        print(f"Final update data: {update_data}")
 
         # Update route fields
         for key, value in update_data.items():
+            print(f"Updating field {key} with value {value}")
             setattr(route, key, value)
 
+        print("Committing changes to database...")
         db.commit()
         db.refresh(route)
+        print("Route updated successfully")
         return route
 
     except Exception as e:
         print(f"Error updating route: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         db.rollback()
         raise HTTPException(
             status_code=500,

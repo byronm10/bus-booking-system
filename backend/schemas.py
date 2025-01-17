@@ -82,6 +82,8 @@ class RouteCreate(BaseModel):
     company_id: UUID
     vehicle_id: Optional[UUID] = None  # Optional manual vehicle assignment
     base_price: Decimal  # Base price for the complete route
+    driver_id: Optional[UUID] = None
+    helper_id: Optional[UUID] = None
 
 class RouteResponse(RouteCreate):
     id: UUID

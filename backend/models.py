@@ -9,11 +9,12 @@ import enum
 class UserRole(str, enum.Enum):
     ADMIN = "ADMIN"
     OPERADOR = "OPERADOR"
-    CONDUCTOR = "CONDUCTOR"
+    CONDUCTOR = "CONDUCTOR" 
     PASAJERO = "PASAJERO"
     TECNICO = "TECNICO"
     JEFE_TALLER = "JEFE_TALLER"
     ADMINISTRATIVO = "ADMINISTRATIVO"
+    AYUDANTE = "AYUDANTE"
 
 class VehicleStatus(str, enum.Enum):
     ACTIVO = "ACTIVO"
@@ -121,11 +122,15 @@ class Route(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())  # Add this
     base_price = Column(Numeric(10, 2), nullable=False)  # Base price in decimal with 2 decimal places
     stop_prices = Column(JSONB, nullable=True, default=[])  # Prices for intermediate stops
-
+    driver_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
+    helper_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=True)
+    
     # Relationships
     company = relationship("Company", back_populates="routes")
     executions = relationship("RouteExecution", back_populates="route", cascade="all, delete-orphan")
     vehicle = relationship("Vehicle", back_populates="routes")  # Add relationship
+    driver = relationship("User", foreign_keys=[driver_id])
+    helper = relationship("User", foreign_keys=[helper_id])
 
 class RouteExecution(Base):
     __tablename__ = "route_executions"

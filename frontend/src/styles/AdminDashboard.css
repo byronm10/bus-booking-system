@@ -368,8 +368,9 @@
 }
 
 .stop-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 1rem;
   align-items: center;
   padding: 0.5rem;
   background: #f8f9fa;
@@ -387,8 +388,13 @@
 }
 
 .stop-detail {
-  padding: 4px 0;
-  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
 }
 
 .stop-detail:last-child {
@@ -470,6 +476,12 @@
   border-radius: 4px;
 }
 
+.price-value {
+  color: #28a745;
+  font-weight: 500;
+  margin-left: 0.5rem;
+}
+
 .stop-price-input {
   display: flex;
   flex-direction: column;
@@ -479,4 +491,35 @@
 .stop-price-input input {
   width: 100px;
   padding: 4px 8px;
+}
+
+.stop-price-edit input {
+  width: 80px;
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.stop-price-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stop-price-edit::before {
+  content: '$';
+  color: #666;
+}
+
+.staff-selection {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.staff-selection select {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
 }
