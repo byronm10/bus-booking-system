@@ -111,6 +111,9 @@ const AdminDashboard = () => {
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [pendingDuration, setPendingDuration] = useState(null);
 
+  // Add state for driver conflict warning
+  const [driverConflict, setDriverConflict] = useState(null);
+
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -567,7 +570,15 @@ const AdminDashboard = () => {
         helper_id: null
       });
     } catch (err) {
-      setError('Error al crear la ruta');
+      if (err.response?.data?.detail?.message && err.response?.data?.detail?.conflicting_route) {
+        const conflict = err.response.data.detail;
+        setDriverConflict({
+          message: conflict.message,
+          route: conflict.conflicting_route
+        });
+      } else {
+        setError('Error al crear la ruta');
+      }
     }
   };
   
@@ -1850,6 +1861,16 @@ const AdminDashboard = () => {
         No
       </button>
     </div>
+  </div>
+)}
+
+{driverConflict && (
+  <div className="driver-conflict-warning">
+    <p>{driverConflict.message}</p>
+    <p>Ruta en conflicto: {driverConflict.route.name}</p>
+    <p>Salida: {formatLocalDateTime(driverConflict.route.departure_time)}</p>
+    <p>Duración: {driverConflict.route.duration} minutos</p>
+    <button onClick={() => setDriverConflict(null)}>Entendido</button>
   </div>
 )}
     </div>

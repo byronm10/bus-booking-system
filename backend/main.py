@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Form, Request
 from fastapi import Body
+from datetime import datetime, timedelta 
 from sqlalchemy.orm import Session
 from db import get_db, Base, engine
 from models import (
@@ -8,8 +9,8 @@ from models import (
     Company, 
     Vehicle, 
     VehicleStatus,
-    Route,           # Add these
-    RouteStatus,     # Add these
+    Route,           
+    RouteStatus,     
     RouteExecution,
     RepetitionPeriod
 )
@@ -20,8 +21,8 @@ from schemas import (
     CompanyResponse,
     VehicleCreate,
     VehicleResponse,
-    RouteCreate,     # Add these
-    RouteResponse,   # Add these
+    RouteCreate,     
+    RouteResponse,   
     RouteExecutionCreate,
     RouteExecutionResponse
 )
@@ -1124,6 +1125,31 @@ async def delete_vehicle(
             detail=f"Error al eliminar el vehículo: {str(e)}"
         )
 
+# Add this helper function
+def check_driver_availability(db: Session, driver_id: UUID, start_time: datetime, duration: int, route_id: UUID = None):
+    """Check if driver has overlapping routes"""
+    if not driver_id:
+        return True, None
+        
+    query = db.query(Route).filter(
+        Route.driver_id == driver_id,
+        Route.status.in_(['ACTIVA', 'EN_EJECUCION']),
+    )
+    
+    if route_id:
+        query = query.filter(Route.id != route_id)
+    
+    conflicting_routes = query.all()
+    
+    end_time = start_time + timedelta(minutes=duration)
+    
+    for route in conflicting_routes:
+        route_end = route.departure_time + timedelta(minutes=route.estimated_duration)
+        if (start_time <= route_end and end_time >= route.departure_time):
+            return False, route
+            
+    return True, None
+
 @app.post("/routes/", response_model=RouteResponse)
 async def create_route(
     route: RouteCreate,
@@ -1135,6 +1161,28 @@ async def create_route(
         print(f"Route data: {route.model_dump()}")
         
         # Check permissions and verify company access - keep this part
+        
+        if route.driver_id:
+            is_available, conflicting_route = check_driver_availability(
+                db, 
+                route.driver_id, 
+                route.departure_time, 
+                route.estimated_duration
+            )
+            
+            if not is_available:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": "El conductor ya está asignado a otra ruta en este horario",
+                        "conflicting_route": {
+                            "id": str(conflicting_route.id),
+                            "name": conflicting_route.name,
+                            "departure_time": conflicting_route.departure_time,
+                            "duration": conflicting_route.estimated_duration
+                        }
+                    }
+                )
         
         # Validate prices
         if route.base_price < 0:
@@ -1295,6 +1343,29 @@ async def update_route(
                 status_code=404,
                 detail="Ruta no encontrada o no tiene permisos para modificarla"
             )
+
+        if route_update.driver_id:
+            is_available, conflicting_route = check_driver_availability(
+                db, 
+                route_update.driver_id, 
+                route_update.departure_time, 
+                route_update.estimated_duration,
+                route_id
+            )
+            
+            if not is_available:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": "El conductor ya está asignado a otra ruta en este horario",
+                        "conflicting_route": {
+                            "id": str(conflicting_route.id),
+                            "name": conflicting_route.name,
+                            "departure_time": conflicting_route.departure_time,
+                            "duration": conflicting_route.estimated_duration
+                        }
+                    }
+                )
 
         print("Converting update data...")
         update_data = route_update.model_dump()

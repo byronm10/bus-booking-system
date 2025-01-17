@@ -523,3 +523,26 @@
   border: 1px solid #ddd;
   border-radius: 4px;
 }
+
+.driver-conflict-warning {
+  background-color: #fff3cd;
+  border: 1px solid #ffeeba;
+  color: #856404;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+
+.driver-conflict-warning button {
+  background-color: #856404;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+  cursor: pointer;
+}
+
+.driver-conflict-warning button:hover {
+  background-color: #6d5204;
+}
