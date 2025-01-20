@@ -518,6 +518,7 @@ async def update_company(
     current_user: User = Depends(get_current_active_user)
 ):
     try:
+        print(f"Starting company update process for company ID: {company_id}")
         # Get existing company
         db_company = db.query(Company).filter(Company.id == company_id).first()
         if not db_company:
@@ -530,32 +531,127 @@ async def update_company(
                 detail="No tiene permisos para modificar esta empresa"
             )
 
-        # Update Cognito group name if name changed
+        # If company name is being changed, handle Cognito group updates
         if db_company.name != company_update.name:
+            old_group_name = db_company.cognito_group_id
             new_group_name = company_update.name.lower().replace(" ", "_")
+            print(f"Company name change detected. Old: {old_group_name}, New: {new_group_name}")
+            
             try:
-                # Update group in Cognito
-                cognito_client.update_group(
-                    GroupName=db_company.cognito_group_id,
+                # Get all users from old group first
+                company_users = db.query(User).filter(User.company_id == company_id).all()
+                
+                # Get admin user if not in company_users
+                admin_user = db.query(User).filter(User.id == db_company.admin_id).first()
+                if admin_user and admin_user not in company_users:
+                    company_users.append(admin_user)
+                
+                print(f"Found {len(company_users)} users to migrate from group {old_group_name} to {new_group_name}")
+
+                # Create new Cognito group
+                print(f"Creating new Cognito group: {new_group_name}")
+                cognito_client.create_group(
+                    GroupName=new_group_name,
                     UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
                     Description=f"Grupo para la empresa de transporte: {company_update.name}"
                 )
-                db_company.cognito_group_id = new_group_name
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error actualizando grupo en Cognito: {str(e)}")
 
-        # Update company fields
+                migration_success = True
+                # Move each user to new group
+                for user in company_users:
+                    try:
+                        print(f"Moving user {user.email} to new group {new_group_name}")
+                        # Add to new group first
+                        cognito_client.admin_add_user_to_group(
+                            UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                            Username=user.email,
+                            GroupName=new_group_name
+                        )
+                        print(f"Successfully added user {user.email} to new group {new_group_name}")
+                        
+                        # Remove from old group
+                        cognito_client.admin_remove_user_from_group(
+                            UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                            Username=user.email,
+                            GroupName=old_group_name
+                        )
+                        print(f"Successfully removed user {user.email} from old group {old_group_name}")
+                    except Exception as user_error:
+                        print(f"Error moving user {user.email}: {str(user_error)}")
+                        migration_success = False
+                        continue
+
+                # Only delete old group if all users were moved successfully
+                if migration_success:
+                    try:
+                        print(f"Attempting to delete old group: {old_group_name}")
+                        cognito_client.delete_group(
+                            UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                            GroupName=old_group_name
+                        )
+                        print(f"Successfully deleted old group: {old_group_name}")
+                    except Exception as delete_error:
+                        print(f"Error deleting old group: {str(delete_error)}")
+                else:
+                    print("Skipping old group deletion due to migration errors")
+
+                # Update company's cognito_group_id
+                print(f"Updating company cognito_group_id to: {new_group_name}")
+                db_company.cognito_group_id = new_group_name
+
+            except Exception as e:
+                print(f"Error in Cognito group update process: {str(e)}")
+                # Try to cleanup new group if something failed
+                try:
+                    print(f"Attempting to cleanup new group {new_group_name} after error")
+                    cognito_client.delete_group(
+                        UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                        GroupName=new_group_name
+                    )
+                    print(f"Successfully cleaned up new group {new_group_name}")
+                except Exception as cleanup_error:
+                    print(f"Error cleaning up new group: {str(cleanup_error)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error actualizando grupos en Cognito: {str(e)}"
+                )
+
+        # Update company fields in database
+        print("Updating company fields in database")
         for key, value in company_update.model_dump().items():
             setattr(db_company, key, value)
 
         db.commit()
         db.refresh(db_company)
+        print("Company update completed successfully")
         return db_company
 
+    except HTTPException as http_error:
+        print(f"HTTP Exception during company update: {str(http_error)}")
+        db.rollback()
+        raise http_error
     except Exception as e:
+        print(f"Unexpected error during company update: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+        # Update company fields in database
+        print("Updating company fields in database")
+        for key, value in company_update.model_dump().items():
+            setattr(db_company, key, value)
 
+        db.commit()
+        db.refresh(db_company)
+        print("Company update completed successfully")
+        return db_company
+
+    except HTTPException as http_error:
+        print(f"HTTP Exception during company update: {str(http_error)}")
+        db.rollback()
+        raise http_error
+    except Exception as e:
+        print(f"Unexpected error during company update: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 @app.delete("/companies/{company_id}")
 async def delete_company(
     company_id: UUID,

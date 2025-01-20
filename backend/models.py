@@ -42,7 +42,10 @@ class User(Base):
     role = Column(ENUM(UserRole, name='user_role', create_type=False))
     name = Column(String)
     email = Column(String, unique=True)
-    identification = Column(String, unique=True)  # Added identification field
+    identification = Column(String, unique=True, nullable=True)
+    license_number = Column(String, unique=True, nullable=True)
+    phone = Column(String, nullable=True)
+    address = Column(String, nullable=True)
     status = Column(String, default="active")
     cognito_sub = Column(String, unique=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'), nullable=True)

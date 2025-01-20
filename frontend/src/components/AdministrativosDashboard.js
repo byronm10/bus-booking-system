@@ -59,7 +59,11 @@ const AdministrativosDashboard = () => {
     name: '',
     email: '',
     role: '',
-    company_id: currentUser?.company_id || ''
+    identification: '',
+    license_number: '',
+    phone: '',
+    address: '',
+    company_id: ''
   });
   const [editingUser, setEditingUser] = useState(null);
 
@@ -445,6 +449,10 @@ const AdministrativosDashboard = () => {
         name: '',
         email: '',
         role: '',
+        identification: '',
+        license_number: '',
+        phone: '',
+        address: '',
         company_id: currentUser.company_id
       });
     } catch (err) {
@@ -498,6 +506,10 @@ const AdministrativosDashboard = () => {
       name: user.name,
       email: user.email,
       role: user.role,
+      identification: user.identification || '',
+      license_number: user.license_number || '',
+      phone: user.phone || '',
+      address: user.address || '',
       company_id: user.company_id
     });
     setShowCreateUser(true);
@@ -546,14 +558,14 @@ const AdministrativosDashboard = () => {
           )}
         </section>
 
-        {/* Users Section */}
-        <section className="users-section">
-          <div className="section-header">
-            <h2>Usuarios</h2>
-            <button onClick={() => setShowCreateUser(true)} className="create-button">
-              Crear Usuario
-            </button>
-          </div>
+      {/* Users Section */}
+      <section className="users-section">
+        <div className="section-header">
+          <h2>Usuarios</h2>
+          <button onClick={() => setShowCreateUser(true)} className="create-button">
+            Crear Usuario
+          </button>
+        </div>
 
           {showCreateUser && (
             <form onSubmit={editingUser ? handleUpdateUser : handleCreateUser} className="user-form">
@@ -570,6 +582,31 @@ const AdministrativosDashboard = () => {
                 value={userFormData.email}
                 onChange={(e) => setUserFormData({...userFormData, email: e.target.value})}
                 required
+              />
+              <input
+                type="text"
+                placeholder="Número de identificación"
+                value={userFormData.identification}
+                onChange={(e) => setUserFormData({...userFormData, identification: e.target.value})}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Número de licencia de conducir"
+                value={userFormData.license_number}
+                onChange={(e) => setUserFormData({...userFormData, license_number: e.target.value})}
+              />
+              <input
+                type="tel"
+                placeholder="Teléfono celular"
+                value={userFormData.phone}
+                onChange={(e) => setUserFormData({...userFormData, phone: e.target.value})}
+              />
+              <input
+                type="text"
+                placeholder="Dirección"
+                value={userFormData.address}
+                onChange={(e) => setUserFormData({...userFormData, address: e.target.value})}
               />
               <select
                 value={userFormData.role}
@@ -595,6 +632,10 @@ const AdministrativosDashboard = () => {
                       name: '',
                       email: '',
                       role: '',
+                      identification: '',
+                      license_number: '',
+                      phone: '',
+                      address: '',
                       company_id: currentUser.company_id
                     });
                   }}
@@ -663,7 +704,19 @@ const AdministrativosDashboard = () => {
                   </div>
                   <div className="detail-row">
                     <span className="detail-label">Identificación:</span>
-                    <span className="detail-value">{selectedUser.identification || 'No asignado'}</span>
+                    <span className="detail-value">{selectedUser.identification}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Licencia:</span>
+                    <span className="detail-value">{selectedUser.license_number || 'No asignado'}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Teléfono:</span>
+                    <span className="detail-value">{selectedUser.phone || 'No asignado'}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Dirección:</span>
+                    <span className="detail-value">{selectedUser.address || 'No asignado'}</span>
                   </div>
                   <div className="detail-row">
                     <span className="detail-label">Rol:</span>

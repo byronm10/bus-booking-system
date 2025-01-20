@@ -9,7 +9,10 @@ class UserCreate(BaseModel):
     name: str
     email: str
     role: UserRole
-    identification: Optional[str] = None  # Make identification optional
+    identification: str
+    license_number: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
     status: Optional[str] = "active"
     company_id: Optional[UUID] = None
 
@@ -18,7 +21,10 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: UserRole
-    identification: Optional[str] = None  # Make identification optional
+    identification: Optional[str] = None
+    license_number: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
     status: str
     cognito_sub: Optional[str] = None
     company_id: Optional[UUID] = None

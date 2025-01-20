@@ -142,6 +142,23 @@
   padding: 10px;
 }
 
+.user-form {
+  display: grid;
+  gap: 1rem;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.user-form input {
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.user-form input[type="tel"] {
+  width: 200px;
+}
+
 .user-form select {
   padding: 8px;
   border: 1px solid #ddd;

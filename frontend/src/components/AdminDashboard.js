@@ -50,7 +50,11 @@ const AdminDashboard = () => {
   const [userFormData, setUserFormData] = useState({
     name: '',
     email: '',
-    role: 'OPERATOR',
+    role: '',
+    identification: '',
+    license_number: '',
+    phone: '',
+    address: '',
     company_id: ''
   });
   const [editingUser, setEditingUser] = useState(null);
@@ -939,6 +943,31 @@ const AdminDashboard = () => {
                 onChange={(e) => setUserFormData({...userFormData, email: e.target.value})}
                 required
               />
+              <input
+                type="text"
+                placeholder="Número de identificación"
+                value={userFormData.identification}
+                onChange={(e) => setUserFormData({...userFormData, identification: e.target.value})}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Número de licencia de conducir"
+                value={userFormData.license_number}
+                onChange={(e) => setUserFormData({...userFormData, license_number: e.target.value})}
+              />
+              <input
+                type="tel"
+                placeholder="Teléfono celular"
+                value={userFormData.phone}
+                onChange={(e) => setUserFormData({...userFormData, phone: e.target.value})}
+              />
+              <input
+                type="text"
+                placeholder="Dirección"
+                value={userFormData.address}
+                onChange={(e) => setUserFormData({...userFormData, address: e.target.value})}
+              />
               <select
                 value={userFormData.role}
                 onChange={(e) => setUserFormData({...userFormData, role: e.target.value})}
@@ -1043,7 +1072,19 @@ const AdminDashboard = () => {
                   </div>
                   <div className="detail-row">
                     <span className="detail-label">Identificación:</span>
-                    <span className="detail-value">{selectedUser.identification || 'No asignado'}</span>
+                    <span className="detail-value">{selectedUser.identification}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Licencia:</span>
+                    <span className="detail-value">{selectedUser.license_number || 'No asignado'}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Teléfono:</span>
+                    <span className="detail-value">{selectedUser.phone || 'No asignado'}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Dirección:</span>
+                    <span className="detail-value">{selectedUser.address || 'No asignado'}</span>
                   </div>
                   <div className="detail-row">
                     <span className="detail-label">Rol:</span>
