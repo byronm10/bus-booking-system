@@ -14,3 +14,4 @@ itsdangerous>=2.1.2
 httpx>=0.20.0
 pytz>=2020.1
 authlib>=1.2.1
+requests>=2.25.1
