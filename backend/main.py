@@ -52,12 +52,14 @@ app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=os.urandom(24))
 
 # Add CORS middleware
+# Add CORS middleware with more explicit configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv('FRONTEND_URL')],
+    allow_origins=[os.getenv('FRONTEND_URL')],  # http://localhost:3000
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Configure OAuth
@@ -326,9 +328,13 @@ async def login(username: str = Form(), password: str = Form()):
 @app.get("/login")
 async def login_cognito(request: Request):
     """Initiate Cognito login"""
-    redirect_uri = request.url_for('auth')
-    print(f"Redirect URI: {redirect_uri}")  # Add this line
-    return await oauth.cognito.authorize_redirect(request, redirect_uri)
+    try:
+        redirect_uri = request.url_for('auth')
+        print(f"Login attempt - Redirect URI: {redirect_uri}")
+        return await oauth.cognito.authorize_redirect(request, redirect_uri)
+    except Exception as e:
+        print(f"Login error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/auth") 
 async def auth(request: Request):

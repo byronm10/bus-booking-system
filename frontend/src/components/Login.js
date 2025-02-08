@@ -69,6 +69,7 @@ const Login = () => {
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     try {
+      // Add REACT_APP_BACKEND_URL to the request
       await axios.post(`${process.env.REACT_APP_BACKEND_URL}/forgot-password`, null, {
         params: {
           email: resetEmail
@@ -83,18 +84,19 @@ const Login = () => {
   const handleResetPassword = async (e) => {
     e.preventDefault();
     try {
-        await axios.post(`${process.env.REACT_APP_BACKEND_URL}/reset-password`, {
-            email: resetEmail,
-            code: resetCode,
-            new_password: newPassword
-        });
-        setIsResettingPassword(false);
-        setResetStep(1);
-        alert('Contraseña actualizada exitosamente');
+      // Add REACT_APP_BACKEND_URL to the request
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/reset-password`, {
+        email: resetEmail,
+        code: resetCode,
+        new_password: newPassword
+      });
+      setIsResettingPassword(false);
+      setResetStep(1);
+      alert('Contraseña actualizada exitosamente');
     } catch (err) {
-        setError(err.response?.data?.detail || 'Error al cambiar la contraseña');
+      setError(err.response?.data?.detail || 'Error al cambiar la contraseña');
     }
-};
+  };
 
   if (isLoading) {
     return <div className="login-container">Loading...</div>;
